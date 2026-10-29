@@ -1,0 +1,9 @@
+{
+  "name": "K: The Card Game",
+  "short_name": "K Game",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#0f172a",
+  "icons": []
+}
