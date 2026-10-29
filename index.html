@@ -20,13 +20,13 @@
         <!-- MENU SCREEN -->
         <div id="menu-screen" class="flex flex-col items-center text-center space-y-6">
             <h1 class="text-4xl sm:text-6xl font-black bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent">K: THE CARD GAME</h1>
-            <p class="text-slate-400 text-sm max-w-sm">Trust no one. Play solo against bots or host a room for real players with auto-bot fillers.</p>
+            <p class="text-slate-400 text-sm max-w-sm">Trust no one. Play solo against bots or host a clean room code like K8421 for real players.</p>
             <div class="bg-slate-900 border border-slate-800 p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl">
                 <button onclick="startSoloGame()" class="w-full py-3.5 bg-amber-600 hover:bg-amber-500 font-bold rounded-xl text-white shadow transition">PLAY SOLO VS BOTS</button>
                 <div class="border-t border-slate-800 pt-3"></div>
                 <button onclick="hostGame()" class="w-full py-3.5 bg-red-600 hover:bg-red-500 font-bold rounded-xl text-white shadow transition">CREATE ONLINE ROOM</button>
                 <div class="flex space-x-2 pt-2">
-                    <input id="room-input" type="text" placeholder="ROOM CODE" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
+                    <input id="room-input" type="text" placeholder="K1234 OR 1234" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
                     <button onclick="joinGame()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 font-bold rounded-xl text-white border border-slate-700 text-sm transition">JOIN</button>
                 </div>
             </div>
@@ -126,7 +126,8 @@
         }
 
         function hostGame() {
-            const code = 'K-' + Math.floor(1000 + Math.random() * 9000);
+            // Strictly K followed by 4 digits or pure numbers, no dashes or underscores
+            const code = 'K' + Math.floor(1000 + Math.random() * 9000);
             peer = new Peer(code);
             isHost = true;
 
@@ -185,20 +186,17 @@
         }
 
         function startOnlineMatch() {
-            // Auto-fill bots if less than 4 players
             while(players.length < 4) {
                 const bId = players.length;
                 players.push({ id: bId, name: `Bot ${bId}`, isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 });
             }
             initMatchSetup();
-            // Broadcast sync to other players
             connections.forEach((c, idx) => {
                 c.send({ type: 'SYNC', players, myIdx: idx + 1, roundNumber, centerPile, currentTurn });
             });
         }
 
         function initMatchSetup() {
-            // Assign roles
             players.forEach((p, idx) => {
                 p.deck = createDeck(p.id);
                 p.hand = p.deck.splice(0, 3);
@@ -316,7 +314,6 @@
                 }
             });
 
-            // Refill hands from deck
             players.forEach(p => {
                 while(p.hand.length < 3 && p.deck.length > 0) {
                     p.hand.push(p.deck.shift());
