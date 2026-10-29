@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>K: The Card Game - 3D PWA Edition</title>
+    <title>K: The Card Game - Online Multiplayer PWA</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <style>
         body { background-color: #090d16; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; overflow-x: hidden; user-select: none; }
@@ -23,400 +24,313 @@
 
     <script type="text/babel">
         function App() {
-            const [gameState, setGameState] = React.useState('MENU');
-            const [playerCount, setPlayerCount] = React.useState(4);
+            const [view, setView] = React.useState('MENU'); // MENU, HOST_LOBBY, JOIN_LOBBY, PLAYING, OVER
+            const [roomCode, setRoomCode] = React.useState('');
+            const [inputCode, setInputCode] = React.useState('');
+            const [isHost, setIsHost] = React.useState(false);
+            const [peer, setPeer] = React.useState(null);
+            const [connections, setConnections] = React.useState([]); // For host: list of client connections
+            const [hostConnection, setHostConnection] = React.useState(null); // For client: connection to host
+
             const [players, setPlayers] = React.useState([]);
+            const [myPlayerId, setMyPlayerId] = React.useState(1);
             const [currentTurnIdx, setCurrentTurnIdx] = React.useState(0);
             const [centerPile, setCenterPile] = React.useState([]);
             const [roundNumber, setRoundNumber] = React.useState(1);
             const [startingPlayerIdx, setStartingPlayerIdx] = React.useState(0);
-            const [log, setLog] = React.useState(["Welcome to K: The Card Game! Choose your player count to begin."]);
+            const [log, setLog] = React.useState(["Welcome to K: The Card Game Online! Create or Join a room."]);
             const [selectedCardIdx, setSelectedCardIdx] = React.useState(null);
-            const [modal, setModal] = React.useState(null); // { type, data }
             const [winner, setWinner] = React.useState(null);
-            const [activeTurnQueue, setActiveTurnQueue] = React.useState([]);
 
-            // Helper for logging
             const addLog = (msg) => setLog(prev => [msg, ...prev.slice(0, 15)]);
 
-            // Initialize Game
-            const startGame = (count) => {
-                setPlayerCount(count);
-                let list = [];
-                // Role distribution per rulebook (<=5 players: 1 killer)
-                let killerCount = count >= 9 ? 3 : (count >= 6 ? 2 : 1);
+            // Generate random 4-char room code
+            const generateCode = () => Math.random().toString(36.substring(2, 6)).toUpperCase();
+
+            // Host a Room
+            const hostGame = () => {
+                const code = 'K-' + Math.floor(1000 + Math.random() * 9000);
+                setRoomCode(code);
+                setIsHost(true);
+                const p = new Peer(code);
+                
+                p.on('open', (id) => {
+                    addLog(`Room hosted successfully with code: ${code}`);
+                    setView('HOST_LOBBY');
+                    // Host is Player 1
+                    setPlayers([{ id: 1, name: 'Host (You)', role: 'SAFE', hand: [], deck: [], completedTasks: 0, isAlive: true }]);
+                });
+
+                p.on('connection', (conn) => {
+                    conn.on('open', () => {
+                        setConnections(prev => [...prev, conn]);
+                        addLog(`A new player connected to your room!`);
+                        
+                        conn.on('data', (data) => {
+                            handleHostReceivedData(data, conn);
+                        });
+                    });
+                });
+                setPeer(p);
+            };
+
+            // Join a Room
+            const joinGame = () => {
+                if(!inputCode) {
+                    alert("Please enter a valid room code.");
+                    return;
+                }
+                setIsHost(false);
+                const p = new Peer();
+                
+                p.on('open', (id) => {
+                    const conn = p.connect(inputCode.trim());
+                    setHostConnection(conn);
+
+                    conn.on('open', () => {
+                        addLog(`Connected to host room ${inputCode}! Waiting for game start.`);
+                        setView('PLAYING');
+                        conn.send({ type: 'JOIN_REQUEST', name: 'Player ' + Math.floor(Math.random() * 100) });
+                    });
+
+                    conn.on('data', (data) => {
+                        handleClientReceivedData(data);
+                    });
+                });
+                setPeer(p);
+            };
+
+            const handleHostReceivedData = (data, conn) => {
+                if(data.type === 'JOIN_REQUEST') {
+                    setPlayers(prev => {
+                        const newId = prev.length + 1;
+                        const updated = [...prev, { id: newId, name: data.name, role: 'SAFE', hand: [], deck: [], completedTasks: 0, isAlive: true }];
+                        // Broadcast updated lobby/players
+                        connections.forEach(c => c.send({ type: 'SYNC_STATE', players: updated }));
+                        return updated;
+                    });
+                } else if(data.type === 'PLAYER_ACTION') {
+                    // Process player action on host authority
+                    processAction(data.playerIdx, data.actionType, data.cardIdx);
+                }
+            };
+
+            const handleClientReceivedData = (data) => {
+                if(data.type === 'SYNC_STATE') {
+                    setPlayers(data.players);
+                } else if(data.type === 'UPDATE_GAME') {
+                    setPlayers(data.players);
+                    setCenterPile(data.centerPile);
+                    setCurrentTurnIdx(data.currentTurnIdx);
+                    setRoundNumber(data.roundNumber);
+                    setWinner(data.winner);
+                    if(data.winner) setView('OVER');
+                }
+            };
+
+            // Start Match as Host
+            const startHostMatch = () => {
+                let count = players.length;
+                if(count < 2) {
+                    alert("You need at least 2 players to start!");
+                    return;
+                }
+                let killerCount = count >= 6 ? 2 : 1;
                 let roles = [];
                 for(let i=0; i<killerCount; i++) roles.push('KILLER');
                 while(roles.length < count) roles.push('SAFE');
-                // Shuffle roles
                 roles.sort(() => Math.random() - 0.5);
 
-                for(let i=0; i<count; i++) {
-                    let pId = i + 1;
-                    // Build player deck: 4 Tasks, 2 Kills, 1 Shield, 1 Nobee, 1 Clue/Antik mix
+                let updatedPlayers = players.map((p, i) => {
                     let deck = [];
-                    for(let t=1; t<=4; t++) deck.push({ id: `t_${pId}_${t}`, type: 'TASK', target: pId, title: `Task ${t}`, desc: 'Complete objective.' });
-                    for(let k=1; k<=2; k++) deck.push({ id: `k_${pId}_${k}`, type: 'KILL', target: pId, title: 'Kill Card', desc: 'Knife Attack!' });
-                    deck.push({ id: `s_${pId}`, type: 'SHIELD', title: 'Shield Card', desc: 'Protect from Death' });
-                    deck.push({ id: `n_${pId}`, type: 'NOBEE', title: 'Nobee Card', desc: 'Assistant Clue Collection' });
-                    deck.push({ id: `c_${pId}`, type: 'CLUE', title: 'Clue Card', desc: 'I Saw CCTV Footage' });
-                    if(i === 0 && count <= 5) deck.push({ id: `a_${pId}`, type: 'ANTIK', title: 'Antik Card', desc: "Detective's Final Verdict" });
+                    for(let t=1; t<=4; t++) deck.push({ id: `t_${p.id}_${t}`, type: 'TASK', target: p.id, title: `Task ${t}`, desc: 'Complete objective.' });
+                    for(let k=1; k<=2; k++) deck.push({ id: `k_${p.id}_${k}`, type: 'KILL', target: p.id, title: 'Kill Card', desc: 'Knife Attack!' });
+                    deck.push({ id: `s_${p.id}`, type: 'SHIELD', title: 'Shield Card', desc: 'Protect from Death' });
+                    deck.push({ id: `n_${p.id}`, type: 'NOBEE', title: 'Nobee Card', desc: 'Assistant Clue Collection' });
+                    deck.push({ id: `c_${p.id}`, type: 'CLUE', title: 'Clue Card', desc: 'I Saw CCTV Footage' });
                     
-                    // Shuffle deck
                     deck.sort(() => Math.random() - 0.5);
-                    let hand = deck.splice(0, 3); // Draw 3
+                    let hand = deck.splice(0, 3);
+                    return { ...p, role: roles[i], hand, deck };
+                });
 
-                    list.push({
-                        id: pId,
-                        name: i === 0 ? 'You (Mosha)' : `Bot ${i}`,
-                        isBot: i !== 0,
-                        role: roles[i], // 'SAFE' or 'KILLER'
-                        hand: hand,
-                        deck: deck,
-                        completedTasks: 0,
-                        isAlive: true,
-                        shieldActive: false
-                    });
-                }
-                setPlayers(list);
-                setRoundNumber(1);
-                setStartingPlayerIdx(0);
-                setCenterPile([]);
-                setWinner(null);
-                setGameState('PLAYING');
-                setupRoundQueue(0, list);
-                addLog(`Game started! Roles assigned. Round 1 begins with Player 1.`);
+                setPlayers(updatedPlayers);
+                setView('PLAYING');
+                broadcastState(updatedPlayers, [], 0, 1, null);
+                addLog(`Online match started with ${count} players!`);
             };
 
-            const setupRoundQueue = (startIdx, currentPlayers) => {
-                let aliveIndices = [];
-                for(let i=0; i<currentPlayers.length; i++) {
-                    let idx = (startIdx + i) % currentPlayers.length;
-                    if(currentPlayers[idx].isAlive) aliveIndices.push(idx);
-                }
-                setActiveTurnQueue(aliveIndices);
-                setCurrentTurnIdx(aliveIndices[0] || 0);
+            const broadcastState = (newPlayers, newPile, turnIdx, roundNum, winState) => {
+                const payload = { type: 'UPDATE_GAME', players: newPlayers, centerPile: newPile, currentTurnIdx: turnIdx, roundNumber: roundNum, winner: winState };
+                connections.forEach(c => c.send(payload));
             };
 
-            // Turn Execution
-            const handlePlayerAction = (actionType, targetPlayerId = null) => {
-                let player = players[currentTurnIdx];
+            const handleHumanAction = (actionType) => {
                 if(selectedCardIdx === null) return;
-                let card = player.hand[selectedCardIdx];
-
-                // Validate card play type restrictions
-                if(['NOBEE', 'CLUE', 'ANTIK', 'GIFT'].includes(card.type) && actionType === 'DECK') {
-                    alert("Special powers and Face-Up cards must be played face-up!");
-                    return;
+                if(isHost) {
+                    processAction(0, actionType, selectedCardIdx);
+                } else {
+                    hostConnection.send({ type: 'PLAYER_ACTION', playerIdx: 0, actionType, cardIdx: selectedCardIdx });
                 }
-
-                let newPlayers = [...players];
-                let activePlayer = newPlayers[currentTurnIdx];
-                activePlayer.hand.splice(selectedCardIdx, 1);
                 setSelectedCardIdx(null);
+            };
 
+            const processAction = (playerIdx, actionType, cardIdx) => {
+                let newPlayers = [...players];
+                let activePlayer = newPlayers[playerIdx];
+                let card = activePlayer.hand.splice(cardIdx, 1)[0];
+
+                let newPile = [...centerPile];
                 if(actionType === 'CENTER' || actionType === 'FACEUP') {
-                    setCenterPile(prev => [...prev, { ...card, playedBy: activePlayer.id, faceUp: actionType === 'FACEUP' }]);
+                    newPile.push({ ...card, playedBy: activePlayer.id, faceUp: actionType === 'FACEUP' });
                     addLog(`${activePlayer.name} placed a card into the center pile.`);
                 } else if(actionType === 'DECK') {
-                    // Place on next living player's deck
-                    let nextIdx = getNextLivingIndex(currentTurnIdx, newPlayers);
-                    newPlayers[nextIdx].deck.unshift(card); // Top of deck
-                    addLog(`${activePlayer.name} passed a card face-down to ${newPlayers[nextIdx].name}'s deck.`);
+                    let nextIdx = (playerIdx + 1) % newPlayers.length;
+                    newPlayers[nextIdx].deck.unshift(card);
+                    addLog(`${activePlayer.name} passed a card face-down to next deck.`);
                 }
 
-                setPlayers(newPlayers);
+                // Advance turn
+                let nextTurn = (currentTurnIdx + 1) % newPlayers.length;
+                if(nextTurn === 0) {
+                    // End of round resolution
+                    addLog(`--- Round ${roundNumber} Resolution ---`);
+                    let kills = [];
+                    let shields = 0;
+                    newPile.forEach(c => {
+                        if(c.type === 'TASK') {
+                            let targetP = newPlayers.find(p => p.id === c.target);
+                            if(targetP && targetP.isAlive) targetP.completedTasks += 1;
+                        } else if(c.type === 'KILL') {
+                            kills.push(c.target);
+                        } else if(c.type === 'SHIELD') {
+                            shields++;
+                        }
+                    });
 
-                // Handle instant face-up powers
-                if(card.type === 'ANTIK') {
-                    setModal({ type: 'ANTIK_GUESS', player: activePlayer });
-                    return;
-                }
-                if(card.type === 'NOBEE') {
-                    setModal({ type: 'NOBEE_CHOICE', player: activePlayer });
-                    return;
-                }
-                if(card.type === 'CLUE') {
-                    setModal({ type: 'CCTV_VIEW', player: activePlayer });
-                    return;
-                }
-
-                advanceTurn(newPlayers);
-            };
-
-            const getNextLivingIndex = (currentIdx, list) => {
-                for(let i=1; i<=list.length; i++) {
-                    let idx = (currentIdx + i) % list.length;
-                    if(list[idx].isAlive) return idx;
-                }
-                return currentIdx;
-            };
-
-            const advanceTurn = (currentPlayers) => {
-                let qPos = activeTurnQueue.indexOf(currentTurnIdx);
-                if(qPos < activeTurnQueue.length - 1) {
-                    let nextIdx = activeTurnQueue[qPos + 1];
-                    setCurrentTurnIdx(nextIdx);
-                    if(currentPlayers[nextIdx].isBot) {
-                        setTimeout(() => executeBotTurn(nextIdx, currentPlayers), 1000);
-                    }
-                } else {
-                    // Round ends! Resolve Center Pile
-                    resolveRound(currentPlayers);
-                }
-            };
-
-            // AI Bot Turn logic
-            const executeBotTurn = (botIdx, currentPlayers) => {
-                let bot = currentPlayers[botIdx];
-                if(!bot || !bot.isAlive || bot.hand.length === 0) {
-                    advanceTurn(currentPlayers);
-                    return;
-                }
-                let cardIdx = Math.floor(Math.random() * bot.hand.length);
-                let card = bot.hand[cardIdx];
-                bot.hand.splice(cardIdx, 1);
-
-                let action = 'CENTER';
-                if(['NOBEE', 'CLUE'].includes(card.type)) action = 'FACEUP';
-
-                setCenterPile(prev => [...prev, { ...card, playedBy: bot.id, faceUp: action === 'FACEUP' }]);
-                addLog(`${bot.name} took their turn.`);
-                setPlayers([...currentPlayers]);
-                advanceTurn(currentPlayers);
-            };
-
-            // Round Resolution Engine
-            const resolveRound = (currentPlayers) => {
-                addLog(`--- Round ${roundNumber} Resolution ---`);
-                let newPlayers = [...currentPlayers];
-                let kills = [];
-                let shields = 0;
-
-                centerPile.forEach(c => {
-                    if(c.type === 'TASK') {
-                        let targetP = newPlayers.find(p => p.id === c.target);
+                    kills.forEach(targetId => {
+                        let targetP = newPlayers.find(p => p.id === targetId);
                         if(targetP && targetP.isAlive) {
-                            targetP.completedTasks += 1;
-                            addLog(`Task completed for Player ${targetP.id}! (${targetP.completedTasks}/4)`);
+                            if(shields > 0) { shields--; }
+                            else { targetP.isAlive = false; addLog(`${targetP.name} was eliminated!`); }
                         }
-                    } else if(c.type === 'KILL') {
-                        kills.push(c.target);
-                    } else if(c.type === 'SHIELD') {
-                        shields++;
-                    }
-                });
+                    });
 
-                // Shield defense logic with randomization if shields < kills
-                kills.sort(() => Math.random() - 0.5);
-                kills.forEach(targetId => {
-                    let targetP = newPlayers.find(p => p.id === targetId);
-                    if(targetP && targetP.isAlive) {
-                        if(shields > 0) {
-                            shields--;
-                            addLog(`Shield blocked the attack on ${targetP.name}!`);
-                        } else {
-                            targetP.isAlive = false;
-                            addLog(`${targetP.name} was eliminated by a Kill Card! Role was ${targetP.role}`);
-                            // Distribute cards to survivors
-                            let droppedCards = [...targetP.hand, ...targetP.deck];
-                            droppedCards.sort(() => Math.random() - 0.5);
-                            let survivors = newPlayers.filter(p => p.isAlive);
-                            droppedCards.forEach((dc, idx) => {
-                                if(survivors.length > 0) {
-                                    survivors[idx % survivors.length].deck.unshift(dc);
-                                }
-                            });
+                    // Refill hands
+                    newPlayers.forEach(p => {
+                        if(p.isAlive) {
+                            while(p.hand.length < 3 && p.deck.length > 0) p.hand.push(p.deck.shift());
                         }
-                    }
-                });
+                    });
 
-                // Check Win Conditions
-                let aliveKillers = newPlayers.filter(p => p.isAlive && p.role === 'KILLER');
-                let aliveSafe = newPlayers.filter(p => p.isAlive && p.role === 'SAFE');
-
-                if(aliveKillers.length === 0) {
-                    setWinner('SAFE');
-                    setGameState('OVER');
-                    return;
+                    newPile = [];
+                    setRoundNumber(prev => prev + 1);
                 }
-                if(aliveSafe.length <= 1 && aliveKillers.length >= 1) {
-                    setWinner('KILLER');
-                    setGameState('OVER');
-                    return;
-                }
-
-                // Refill hands to 3 cards
-                newPlayers.forEach(p => {
-                    if(p.isAlive) {
-                        while(p.hand.length < 3 && p.deck.length > 0) {
-                            p.hand.push(p.deck.shift());
-                        }
-                    }
-                });
 
                 setPlayers(newPlayers);
-                setCenterPile([]);
-                let nextStart = (startingPlayerIdx + 1) % newPlayers.length;
-                while(!newPlayers[nextStart].isAlive) nextStart = (nextStart + 1) % newPlayers.length;
-                setStartingPlayerIdx(nextStart);
-                setRoundNumber(prev => prev + 1);
-                setupRoundQueue(nextStart, newPlayers);
-                addLog(`Starting Round ${roundNumber + 1}...`);
-
-                // If human player is dead or bot starts
-                if(!newPlayers[nextStart].isBot && !newPlayers[nextStart].isAlive) {
-                    // auto advance if player dead
-                } else if(newPlayers[nextStart].isBot) {
-                    setTimeout(() => executeBotTurn(nextStart, newPlayers), 1000);
-                }
+                setCenterPile(newPile);
+                setCurrentTurnIdx(nextTurn);
+                broadcastState(newPlayers, newPile, nextTurn, roundNumber, winner);
             };
 
-            const humanPlayer = players[0] || { hand: [], role: 'SAFE' };
-            const isHumanTurn = currentTurnIdx === 0 && players[0]?.isAlive;
+            const myPlayer = players[isHost ? 0 : 0] || { hand: [], role: 'SAFE', completedTasks: 0 };
 
             return (
                 <div className="flex-1 flex flex-col max-w-6xl mx-auto w-full p-3 sm:p-6">
-                    {/* Header */}
                     <header className="flex justify-between items-center mb-4 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
-                        <div className="flex items-center space-x-3">
-                            <span className="text-xl font-black bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent">K: THE CARD GAME</span>
-                            {gameState === 'PLAYING' && (
-                                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300">Round {roundNumber}</span>
-                            )}
-                        </div>
-                        {gameState === 'PLAYING' && (
+                        <span className="text-xl font-black bg-gradient-to-r from-red-500 to-amber-500 bg-clip-text text-transparent">K: THE CARD GAME (ONLINE)</span>
+                        {view === 'PLAYING' && (
                             <div className="flex items-center space-x-2">
-                                <div className={`px-3 py-1 rounded-full font-bold text-xs flex items-center space-x-1 border ${humanPlayer.role === 'KILLER' ? 'bg-red-950/50 border-red-600 text-red-400' : 'bg-blue-950/50 border-blue-600 text-blue-400'}`}>
-                                    <span>IDENTITY:</span>
-                                    <span className="text-sm px-1.5 rounded bg-slate-900">{humanPlayer.role === 'KILLER' ? 'K' : 'S'}</span>
+                                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300">Round {roundNumber}</span>
+                                <div className="px-3 py-1 rounded-full font-bold text-xs bg-red-950/50 border border-red-600 text-red-400">
+                                    ROLE: {myPlayer.role}
                                 </div>
                             </div>
                         )}
                     </header>
 
-                    {/* MENU SCREEN */}
-                    {gameState === 'MENU' && (
+                    {view === 'MENU' && (
                         <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-6">
-                            <div className="space-y-2">
-                                <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white">Trust No One.</h1>
-                                <p className="text-slate-400 max-w-md mx-auto text-sm sm:text-base">Survive the night, complete your tasks, or hunt down the Killer in this official ruleset simulator.</p>
-                            </div>
+                            <h1 className="text-4xl sm:text-6xl font-black text-white">Online Rooms</h1>
+                            <p className="text-slate-400 max-w-md mx-auto">Create a private room to host your friends or join an existing room code.</p>
                             <div className="bg-slate-900/90 border border-slate-800 p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-2xl">
-                                <label className="block text-sm font-semibold text-slate-300">Select Player Count (4 - 10):</label>
-                                <input type="range" min="4" max="10" value={playerCount} onChange={(e) => setPlayerCount(parseInt(e.target.value))} className="w-full accent-red-600" />
-                                <div className="text-2xl font-bold text-red-500">{playerCount} Players</div>
-                                <button onClick={() => startGame(playerCount)} className="w-full py-3.5 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-500 hover:to-rose-600 font-bold rounded-xl shadow-lg transition transform active:scale-95 text-white">
-                                    START GAME
+                                <button onClick={hostGame} className="w-full py-3.5 bg-red-600 hover:bg-red-500 font-bold rounded-xl text-white shadow">
+                                    CREATE ROOM (HOST)
                                 </button>
+                                <div className="flex space-x-2 pt-2">
+                                    <input type="text" placeholder="Enter Room Code" value={inputCode} onChange={(e) => setInputCode(e.target.value)} className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 text-sm text-white uppercase" />
+                                    <button onClick={joinGame} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 font-bold rounded-xl text-white border border-slate-700 text-sm">
+                                        JOIN
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* PLAYING TABLETOP VIEW */}
-                    {gameState === 'PLAYING' && (
-                        <div className="flex-1 flex flex-col perspective-table space-y-4">
-                            {/* Opponents Ring */}
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {players.filter(p => p.id !== 1).map(p => (
-                                    <div key={p.id} className={`p-3 rounded-2xl border transition-all ${currentTurnIdx === p.id - 1 ? 'bg-red-950/30 border-red-500 shadow-lg shadow-red-900/20' : 'bg-slate-900/60 border-slate-800'} ${!p.isAlive ? 'opacity-40 grayscale' : ''}`}>
-                                        <div className="flex justify-between items-center text-xs font-bold text-slate-300">
-                                            <span>{p.name}</span>
-                                            <span className={p.isAlive ? 'text-emerald-400' : 'text-red-500'}>{p.isAlive ? 'Alive' : 'Eliminated'}</span>
-                                        </div>
-                                        <div className="mt-2 flex justify-between text-[11px] text-slate-400">
-                                            <span>Hand: {p.hand.length}</span>
-                                            <span>Tasks: {p.completedTasks}/4</span>
-                                        </div>
-                                    </div>
-                                ))}
+                    {view === 'HOST_LOBBY' && (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-6">
+                            <h2 className="text-3xl font-black text-white">Hosting Room</h2>
+                            <div className="text-4xl font-mono font-bold text-red-500 bg-slate-900 border border-slate-800 px-6 py-3 rounded-2xl">{roomCode}</div>
+                            <p className="text-slate-400 text-sm">Share this code with your friends so they can join your lobby!</p>
+                            <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl w-full max-w-md text-left">
+                                <div className="text-xs font-bold text-slate-400 mb-2">PLAYERS IN LOBBY ({players.length}):</div>
+                                {players.map(p => <div key={p.id} className="text-sm font-semibold text-white py-1">&bull; {p.name}</div>)}
                             </div>
+                            <button onClick={startHostMatch} className="px-8 py-3.5 bg-red-600 hover:bg-red-500 font-bold rounded-xl text-white shadow">
+                                START GAME NOW
+                            </button>
+                        </div>
+                    )}
 
-                            {/* Center Felt Table & Center Pile */}
-                            <div className="flex-1 bg-gradient-to-b from-slate-900/90 to-slate-950/90 border border-slate-800/80 rounded-3xl p-6 flex flex-col items-center justify-center relative min-h-[200px] shadow-inner">
-                                <div className="absolute top-3 left-4 text-xs font-semibold text-slate-500 uppercase tracking-widest">Center Pile ({centerPile.length} cards)</div>
-                                {centerPile.length === 0 ? (
-                                    <div className="text-slate-600 text-sm italic">Center pile is empty this round...</div>
-                                ) : (
-                                    <div className="flex flex-wrap gap-2 justify-center max-w-md">
-                                        {centerPile.map((c, i) => (
-                                            <div key={i} className="w-16 h-24 bg-slate-800 border border-slate-700 rounded-lg p-1.5 flex flex-col justify-between text-[10px] shadow-md animate-fade-in">
-                                                <span className="font-bold text-red-400">{c.type}</span>
-                                                <span className="text-slate-300 text-center truncate">{c.title}</span>
-                                                <span className="text-[8px] text-slate-500 text-right">P{c.playedBy}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                                <div className="absolute bottom-3 right-4 text-xs text-amber-500/80 font-medium">
-                                    {isHumanTurn ? "👉 Your Turn! Select a card below." : `Waiting for ${players[currentTurnIdx]?.name}...`}
+                    {view === 'PLAYING' && (
+                        <div className="flex-1 flex flex-col space-y-4">
+                            <div className="flex-1 bg-slate-900/90 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center relative min-h-[200px]">
+                                <div className="absolute top-3 left-4 text-xs font-semibold text-slate-500 uppercase">Center Pile ({centerPile.length} cards)</div>
+                                <div className="flex flex-wrap gap-2 justify-center max-w-md">
+                                    {centerPile.map((c, i) => (
+                                        <div key={i} className="w-16 h-24 bg-slate-800 border border-slate-700 rounded-lg p-1.5 flex flex-col justify-between text-[10px]">
+                                            <span className="font-bold text-red-400">{c.type}</span>
+                                            <span className="text-slate-300 text-center truncate">{c.title}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Action & Log Bar */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 <div className="md:col-span-2 bg-slate-900/80 border border-slate-800 rounded-2xl p-3 h-28 overflow-y-auto text-xs space-y-1 font-mono text-slate-300">
                                     <div className="text-slate-500 font-bold mb-1">=== GAME LOG ===</div>
                                     {log.map((l, i) => <div key={i}>&gt; {l}</div>)}
                                 </div>
                                 <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3 flex flex-col justify-center space-y-2">
-                                    <div className="text-xs font-bold text-slate-400 text-center">TURN ACTIONS</div>
-                                    {selectedCardIdx !== null && isHumanTurn ? (
+                                    {selectedCardIdx !== null ? (
                                         <div className="flex flex-col space-y-2">
-                                            <button onClick={() => handlePlayerAction('CENTER')} className="w-full py-2 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl text-xs shadow">
-                                                Place Face-Down in Center Pile
-                                            </button>
-                                            {['TASK', 'KILL', 'SHIELD'].includes(humanPlayer.hand[selectedCardIdx]?.type) ? (
-                                                <button onClick={() => handlePlayerAction('DECK')} className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold rounded-xl text-xs border border-slate-700">
-                                                    Pass Face-Down to Next Player's Deck
-                                                </button>
-                                            ) : (
-                                                <button onClick={() => handlePlayerAction('FACEUP')} className="w-full py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold rounded-xl text-xs shadow">
-                                                    Play Face-Up (Special Power)
-                                                </button>
-                                            )}
+                                            <button onClick={() => handleHumanAction('CENTER')} className="w-full py-2 bg-red-600 text-white font-bold rounded-xl text-xs">Place in Center Pile</button>
+                                            <button onClick={() => handleHumanAction('DECK')} className="w-full py-2 bg-slate-800 text-slate-200 font-bold rounded-xl text-xs border border-slate-700">Pass to Next Deck</button>
                                         </div>
                                     ) : (
-                                        <div className="text-xs text-slate-500 text-center italic py-3">Tap a card in your hand to configure action</div>
+                                        <div className="text-xs text-slate-500 text-center italic">Select a card from your hand</div>
                                     )}
                                 </div>
                             </div>
 
-                            {/* Human Player Hand Tray */}
-                            <div className={`p-4 rounded-3xl border transition-all ${humanPlayer.role === 'KILLER' ? 'bg-red-950/20 border-red-900/50' : 'bg-blue-950/20 border-blue-900/50'} flex flex-col space-y-2`}>
+                            <div className="p-4 rounded-3xl border bg-slate-900/60 border-slate-800 flex flex-col space-y-2">
                                 <div className="flex justify-between items-center px-1">
-                                    <span className="text-xs font-bold text-slate-300">YOUR HAND ({humanPlayer.hand.length} cards)</span>
-                                    <span className="text-[11px] text-slate-400">Tasks Completed: <strong className="text-white">{humanPlayer.completedTasks}/4</strong></span>
+                                    <span className="text-xs font-bold text-slate-300">YOUR HAND ({myPlayer.hand.length})</span>
+                                    <span className="text-[11px] text-slate-400">Tasks: <strong>{myPlayer.completedTasks}/4</strong></span>
                                 </div>
                                 <div className="flex space-x-3 overflow-x-auto pb-2 pt-1">
-                                    {humanPlayer.hand.map((card, idx) => (
-                                        <div key={card.id} onClick={() => isHumanTurn && setSelectedCardIdx(idx)} className={`w-28 sm:w-32 h-40 bg-slate-900 border-2 rounded-2xl p-3 flex flex-col justify-between cursor-pointer card-3d flex-shrink-0 ${selectedCardIdx === idx ? 'border-red-500 ring-2 ring-red-500/50 -translate-y-2' : 'border-slate-800 hover:border-slate-700'}`}>
-                                            <div className="flex justify-between items-start">
-                                                <span className="text-[10px] font-black text-red-400">{card.type}</span>
-                                                <span className={`text-[9px] px-1.5 py-0.5 rounded ${card.type === 'TASK' ? 'bg-blue-900 text-blue-300' : 'bg-red-900 text-red-300'}`}>Card</span>
-                                            </div>
+                                    {myPlayer.hand.map((card, idx) => (
+                                        <div key={card.id} onClick={() => setSelectedCardIdx(idx)} className={`w-28 h-40 bg-slate-900 border-2 rounded-2xl p-3 flex flex-col justify-between cursor-pointer card-3d flex-shrink-0 ${selectedCardIdx === idx ? 'border-red-500 ring-2 ring-red-500/50 -translate-y-2' : 'border-slate-800'}`}>
+                                            <span className="text-[10px] font-black text-red-400">{card.type}</span>
                                             <div>
-                                                <h4 className="font-bold text-xs text-white leading-tight">{card.title}</h4>
-                                                <p className="text-[10px] text-slate-400 mt-1 line-clamp-2">{card.desc}</p>
+                                                <h4 className="font-bold text-xs text-white">{card.title}</h4>
+                                                <p className="text-[10px] text-slate-400 mt-1">{card.desc}</p>
                                             </div>
-                                            <div className="text-[9px] text-right text-slate-500 font-mono">#ID:{card.id.slice(0,4)}</div>
+                                            <span className="text-[9px] text-right text-slate-500">P{card.id}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
-                        </div>
-                    )}
-
-                    {/* GAME OVER SCREEN */}
-                    {gameState === 'OVER' && (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center p-6 space-y-6">
-                            <h1 className="text-4xl sm:text-6xl font-black text-white">GAME OVER</h1>
-                            <div className={`text-2xl font-bold px-6 py-3 rounded-2xl border ${winner === 'SAFE' ? 'bg-blue-950/80 border-blue-600 text-blue-400' : 'bg-red-950/80 border-red-600 text-red-400'}`}>
-                                {winner === 'SAFE' ? '🎉 SAFE PLAYERS WIN!' : '🔪 KILLER WINS THE MATCH!'}
-                            </div>
-                            <button onClick={() => setGameState('MENU')} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 font-bold rounded-xl text-white transition">
-                                MAIN MENU
-                            </button>
                         </div>
                     )}
                 </div>
