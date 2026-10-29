@@ -6,6 +6,7 @@
     <title>K: The Card Game - Ultimate Edition</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
+    <meta name="build-version" content="2.1-beta">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
@@ -26,7 +27,7 @@
                 <div class="border-t border-slate-800 pt-3"></div>
                 <button onclick="hostGame()" class="w-full py-3.5 bg-red-600 hover:bg-red-500 font-bold rounded-xl text-white shadow transition">CREATE ONLINE ROOM</button>
                 <div class="flex space-x-2 pt-2">
-                    <input id="room-input" type="text" placeholder="K1234 OR 1234" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
+                    <input id="room-input" type="text" placeholder="K1234" class="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
                     <button onclick="joinGame()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 font-bold rounded-xl text-white border border-slate-700 text-sm transition">JOIN</button>
                 </div>
             </div>
@@ -36,7 +37,7 @@
         <div id="lobby-screen" class="hidden flex flex-col items-center text-center space-y-6">
             <h2 class="text-3xl font-black text-white">Online Game Room</h2>
             <div id="display-code" class="text-4xl font-mono font-bold text-red-500 bg-slate-900 border border-slate-800 px-6 py-3 rounded-2xl tracking-widest">---</div>
-            <p class="text-slate-400 text-sm">Waiting for friends. Empty slots will auto-fill with bots to guarantee a 4-player game!</p>
+            <p class="text-slate-400 text-sm">Waiting for friends. Empty slots will auto-fill with bot players to guarantee a full match!</p>
             <div id="player-list" class="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl w-full max-w-md text-left space-y-1 text-sm">
                 <div class="text-xs font-bold text-slate-500 mb-2">CONNECTED PLAYERS:</div>
             </div>
@@ -55,7 +56,7 @@
             
             <!-- Center Table & Pile -->
             <div class="flex-1 bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center relative min-h-[220px]">
-                <div class="absolute top-3 left-4 text-xs font-semibold text-slate-500 uppercase tracking-widest">Center Pile (<span id="pile-count">0</span>/4 Played)</div>
+                <div class="absolute top-3 left-4 text-xs font-semibold text-slate-500 uppercase tracking-widest">Center Pile (<span id="pile-count">0</span>/<span id="total-players-count">4</span> Played)</div>
                 <div id="center-pile" class="flex flex-wrap gap-2 justify-center max-w-md text-xs">
                     <span class="text-slate-600 italic">Waiting for players to submit cards...</span>
                 </div>
@@ -117,16 +118,15 @@
 
         function startSoloGame() {
             players = [
-                { id: 0, name: 'You', isBot: false, role: 'KILLER', hand: [], deck: [], tasks: 0 },
-                { id: 1, name: 'Bot Alpha', isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 },
-                { id: 2, name: 'Bot Beta', isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 },
-                { id: 3, name: 'Bot Gamma', isBot: true, role: 'KILLER', hand: [], deck: [], tasks: 0 }
+                { id: 0, name: 'Player One', isBot: false, role: 'KILLER', hand: [], deck: [], tasks: 0 },
+                { id: 1, name: 'Player Two Bot', isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 },
+                { id: 2, name: 'Player Three Bot', isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 },
+                { id: 3, name: 'Player Four Bot', isBot: true, role: 'KILLER', hand: [], deck: [], tasks: 0 }
             ];
             initMatchSetup();
         }
 
         function hostGame() {
-            // Strictly K followed by 4 digits or pure numbers, no dashes or underscores
             const code = 'K' + Math.floor(1000 + Math.random() * 9000);
             peer = new Peer(code);
             isHost = true;
@@ -135,7 +135,7 @@
                 document.getElementById('menu-screen').classList.add('hidden');
                 document.getElementById('lobby-screen').classList.remove('hidden');
                 document.getElementById('display-code').innerText = code;
-                players = [{ id: 0, name: 'Host (You)', isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 }];
+                players = [{ id: 0, name: 'Player One (Host)', isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 }];
                 updateLobbyUI();
                 logMsg(`Room hosted successfully: ${code}`);
             });
@@ -143,9 +143,10 @@
             peer.on('connection', (c) => {
                 connections.push(c);
                 const pId = players.length;
-                players.push({ id: pId, name: `Player ${pId + 1}`, isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 });
+                let name = pId === 1 ? 'Player Two' : pId === 2 ? 'Player Three' : `Player ${pId + 1}`;
+                players.push({ id: pId, name: name, isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 });
                 updateLobbyUI();
-                logMsg(`A player joined your room! Total players: ${players.length}`);
+                logMsg(`${name} joined your room! Total players: ${players.length}`);
             });
         }
 
@@ -181,14 +182,16 @@
             box.innerHTML = '<div class="text-xs font-bold text-slate-500 mb-2">CONNECTED PLAYERS:</div>';
             players.forEach(p => box.innerHTML += `<div class="text-sm font-semibold text-white py-1">&bull; ${p.name}</div>`);
             if(players.length < 4) {
-                box.innerHTML += `<div class="text-xs text-amber-400 italic mt-2">+ ${4 - players.length} Bot(s) will auto-fill on start!</div>`;
+                let diff = 4 - players.length;
+                box.innerHTML += `<div class="text-xs text-amber-400 italic mt-2">+ ${diff} Bot(s) will auto-fill on start!</div>`;
             }
         }
 
         function startOnlineMatch() {
             while(players.length < 4) {
                 const bId = players.length;
-                players.push({ id: bId, name: `Bot ${bId}`, isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 });
+                let botName = bId === 1 ? 'Player Two Bot' : bId === 2 ? 'Player Three Bot' : `Player ${bId + 1} Bot`;
+                players.push({ id: bId, name: botName, isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 });
             }
             initMatchSetup();
             connections.forEach((c, idx) => {
@@ -197,7 +200,7 @@
         }
 
         function initMatchSetup() {
-            players.forEach((p, idx) => {
+            players.forEach((p) => {
                 p.deck = createDeck(p.id);
                 p.hand = p.deck.splice(0, 3);
             });
@@ -212,10 +215,26 @@
             const me = players[myIdx];
             document.getElementById('game-role').innerText = `ROLE: ${me.role}`;
             document.getElementById('player-count-badge').innerText = `${players.length} Players`;
+            document.getElementById('total-players-count').innerText = players.length;
             renderHand();
             renderCenterPile();
+            updateTurnIndicator();
             logMsg(`Match started! Round ${roundNumber} underway.`);
+            
+            // Kick off bot checks immediately in case bot starts first
             checkBotTurn();
+        }
+
+        function updateTurnIndicator() {
+            const activeP = players[currentTurn];
+            const indicator = document.getElementById('turn-indicator');
+            if(currentTurn === myIdx) {
+                indicator.innerText = "Your Turn (Player One)";
+                indicator.className = "text-xs font-bold text-emerald-400 text-center uppercase animate-pulse";
+            } else {
+                indicator.innerText = `${activeP.name}'s Turn`;
+                indicator.className = "text-xs font-bold text-amber-400 text-center uppercase";
+            }
         }
 
         function renderHand() {
@@ -271,7 +290,7 @@
             } else {
                 let nextIdx = (myIdx + 1) % players.length;
                 players[nextIdx].deck.unshift(playedCard);
-                logMsg(`You passed a card to Player ${players[nextIdx].name}'s deck.`);
+                logMsg(`You passed a card to ${players[nextIdx].name}'s deck.`);
             }
 
             advanceTurn();
@@ -287,13 +306,13 @@
             }
 
             currentTurn = (currentTurn + 1) % players.length;
-            document.getElementById('turn-indicator').innerText = currentTurn === myIdx ? "Your Turn" : `${players[currentTurn].name}'s Turn`;
+            updateTurnIndicator();
             checkBotTurn();
         }
 
         function checkBotTurn() {
             let activeP = players[currentTurn];
-            if(activeP.isBot && (isHost || players.length === 4)) {
+            if(activeP.isBot) {
                 setTimeout(() => {
                     if(activeP.hand.length > 0) {
                         let botCard = activeP.hand.pop();
@@ -301,7 +320,7 @@
                         logMsg(`${activeP.name} played a card into the center pile.`);
                         advanceTurn();
                     }
-                }, 1000);
+                }, 1200);
             }
         }
 
