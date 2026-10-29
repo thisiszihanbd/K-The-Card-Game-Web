@@ -1,4 +1,3 @@
-<!-- cache refresh trigger -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,7 +6,7 @@
     <title>K: The Card Game - Ultimate Edition</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
-    <meta name="build-version" content="2.1-beta">
+    <meta name="build-version" content="2.2-beta">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
     <style>
@@ -38,7 +37,7 @@
         <div id="lobby-screen" class="hidden flex flex-col items-center text-center space-y-6">
             <h2 class="text-3xl font-black text-white">Online Game Room</h2>
             <div id="display-code" class="text-4xl font-mono font-bold text-red-500 bg-slate-900 border border-slate-800 px-6 py-3 rounded-2xl tracking-widest">---</div>
-            <p class="text-slate-400 text-sm">Waiting for friends. Empty slots will auto-fill with bot players to guarantee a full match!</p>
+            <p class="text-slate-400 text-sm">Waiting for players. Empty slots will auto-fill with bot players (Player Three Bot, Player Four Bot) to guarantee a full match!</p>
             <div id="player-list" class="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl w-full max-w-md text-left space-y-1 text-sm">
                 <div class="text-xs font-bold text-slate-500 mb-2">CONNECTED PLAYERS:</div>
             </div>
@@ -108,6 +107,11 @@
             }
         }
 
+        function getPlayerName(index) {
+            const names = ['Player One', 'Player Two', 'Player Three Bot', 'Player Four Bot'];
+            return names[index] || `Player ${index + 1}`;
+        }
+
         function createDeck(playerId) {
             return [
                 { id: `t1_${playerId}`, type: 'TASK', title: 'Task 1', desc: 'Complete objective', target: playerId },
@@ -136,7 +140,7 @@
                 document.getElementById('menu-screen').classList.add('hidden');
                 document.getElementById('lobby-screen').classList.remove('hidden');
                 document.getElementById('display-code').innerText = code;
-                players = [{ id: 0, name: 'Player One (Host)', isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 }];
+                players = [{ id: 0, name: 'Player One', isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 }];
                 updateLobbyUI();
                 logMsg(`Room hosted successfully: ${code}`);
             });
@@ -144,10 +148,10 @@
             peer.on('connection', (c) => {
                 connections.push(c);
                 const pId = players.length;
-                let name = pId === 1 ? 'Player Two' : pId === 2 ? 'Player Three' : `Player ${pId + 1}`;
-                players.push({ id: pId, name: name, isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 });
+                let assignedName = pId === 1 ? 'Player Two' : pId === 2 ? 'Player Three' : `Player ${pId + 1}`;
+                players.push({ id: pId, name: assignedName, isBot: false, role: 'SAFE', hand: [], deck: [], tasks: 0 });
                 updateLobbyUI();
-                logMsg(`${name} joined your room! Total players: ${players.length}`);
+                logMsg(`${assignedName} joined your room! Total players: ${players.length}`);
             });
         }
 
@@ -181,17 +185,22 @@
         function updateLobbyUI() {
             const box = document.getElementById('player-list');
             box.innerHTML = '<div class="text-xs font-bold text-slate-500 mb-2">CONNECTED PLAYERS:</div>';
-            players.forEach(p => box.innerHTML += `<div class="text-sm font-semibold text-white py-1">&bull; ${p.name}</div>`);
+            players.forEach((p, idx) => {
+                let displayName = p.name;
+                box.innerHTML += `<div class="text-sm font-semibold text-white py-1">&bull; ${displayName}</div>`;
+            });
             if(players.length < 4) {
-                let diff = 4 - players.length;
-                box.innerHTML += `<div class="text-xs text-amber-400 italic mt-2">+ ${diff} Bot(s) will auto-fill on start!</div>`;
+                for(let i = players.length; i < 4; i++) {
+                    let botPlaceholderName = i === 2 ? 'Player Three Bot' : i === 3 ? 'Player Four Bot' : `Player ${i + 1} Bot`;
+                    box.innerHTML += `<div class="text-xs text-amber-400 italic py-0.5">&bull; ${botPlaceholderName} (Will auto-fill)</div>`;
+                }
             }
         }
 
         function startOnlineMatch() {
             while(players.length < 4) {
                 const bId = players.length;
-                let botName = bId === 1 ? 'Player Two Bot' : bId === 2 ? 'Player Three Bot' : `Player ${bId + 1} Bot`;
+                let botName = bId === 2 ? 'Player Three Bot' : bId === 3 ? 'Player Four Bot' : `Player ${bId + 1} Bot`;
                 players.push({ id: bId, name: botName, isBot: true, role: 'SAFE', hand: [], deck: [], tasks: 0 });
             }
             initMatchSetup();
@@ -222,7 +231,6 @@
             updateTurnIndicator();
             logMsg(`Match started! Round ${roundNumber} underway.`);
             
-            // Kick off bot checks immediately in case bot starts first
             checkBotTurn();
         }
 
@@ -230,7 +238,7 @@
             const activeP = players[currentTurn];
             const indicator = document.getElementById('turn-indicator');
             if(currentTurn === myIdx) {
-                indicator.innerText = "Your Turn (Player One)";
+                indicator.innerText = `Your Turn (${players[myIdx].name})`;
                 indicator.className = "text-xs font-bold text-emerald-400 text-center uppercase animate-pulse";
             } else {
                 indicator.innerText = `${activeP.name}'s Turn`;
