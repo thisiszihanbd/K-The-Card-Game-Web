@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>K: The Card Game - Pro 3.1 Edition</title>
 
-  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -18,7 +17,6 @@
     }
   </script>
 
-  <!-- React 18, Babel, and PeerJS -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -45,7 +43,6 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // --- SYNTH AUDIO FX ---
     const playAudioFx = (type) => {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -75,7 +72,6 @@
       } catch (e) {}
     };
 
-    // --- GAME ENGINE LOGIC ---
     const getExplicitPlayerName = (idx) => {
       if (idx === 0) return 'Player One';
       if (idx === 1) return 'Player Two';
@@ -109,10 +105,9 @@
       return { roles, playerDecks, playerHands };
     };
 
-    // --- REACT APP COMPONENT ---
     function App() {
       const [screen, setScreen] = useState('MENU');
-      const [networkMode, setNetworkMode] = useState('SOLO'); // SOLO, HOST, JOIN
+      const [networkMode, setNetworkMode] = useState('SOLO');
       const [roomCode, setRoomCode] = useState('');
       const [joinCode, setJoinCode] = useState('');
       
@@ -130,7 +125,6 @@
 
       const addLog = (msg) => setLogs(prev => [msg, ...prev.slice(0, 49)]);
 
-      // -- NETWORKING: HOST --
       const hostRoom = () => {
         const code = 'K' + Math.floor(1000 + Math.random() * 9000);
         setRoomCode(code);
@@ -162,7 +156,6 @@
         });
       };
 
-      // -- NETWORKING: JOIN --
       const joinRoom = () => {
         const code = joinCode.trim().toUpperCase();
         if (!code) return alert('Enter code!');
@@ -194,7 +187,6 @@
         });
       };
 
-      // -- BROADCAST SYNC (Host Only) --
       const syncToClients = (stateUpdates) => {
         if (networkMode !== 'HOST') return;
         connsRef.current.forEach((conn, idx) => {
@@ -206,7 +198,6 @@
         });
       };
 
-      // -- START MATCH --
       const startMatch = (isSolo) => {
         let currentPlayers = [...players];
         if (isSolo) {
@@ -215,7 +206,6 @@
           setMyId(1);
         }
 
-        // Auto-fill bots to make it 4 players
         while (currentPlayers.length < 4) {
           const bId = currentPlayers.length + 1;
           currentPlayers.push({ id: bId, name: getExplicitPlayerName(bId - 1), isBot: true, role: 'SAFE', deck: [], hand: [], tasks: 0, isAlive: true });
@@ -237,37 +227,37 @@
         syncToClients({ players: readyPlayers, activeTurnId: 1, centerPile: [], currentRound: 1, logs: newLogs });
       };
 
-      // -- CORE GAME LOGIC (Runs on Host/Solo) --
       const handleCardPlayAuth = (playerId, card, destination) => {
         let updatedPlayers = [...players];
         const playerIdx = updatedPlayers.findIndex(p => p.id === playerId);
         const pObj = updatedPlayers[playerIdx];
 
-        // Remove from hand
-        updatedPlayers[playerIdx] = { ...pObj, hand: pObj.hand.filter(c => c.id !== card.id) };
+        if (card) {
+          updatedPlayers[playerIdx] = { ...pObj, hand: pObj.hand.filter(c => c.id !== card.id) };
+        }
         
         let newCenter = [...centerPile];
         let latestLogs = [...logs];
         
-        if (destination === 'CENTER') {
+        if (destination === 'CENTER' && card) {
           newCenter.push({ ...card, playedBy: pObj.name });
           latestLogs.unshift(`🃏 ${pObj.name} played a card face-down.`);
-        } else {
+        } else if (card) {
           const nextAlive = updatedPlayers.find(p => p.id > playerId && p.isAlive) || updatedPlayers.find(p => p.isAlive);
           if (nextAlive) {
             const nIdx = updatedPlayers.findIndex(p => p.id === nextAlive.id);
             updatedPlayers[nIdx].deck.unshift(card);
             latestLogs.unshift(`➡️ ${pObj.name} passed a card to ${nextAlive.name}.`);
           }
+        } else {
+          latestLogs.unshift(`⏭️ ${pObj.name} had no cards and passed their turn.`);
         }
 
         playAudioFx('card');
 
-        // Check if round is over (everyone played)
         if (newCenter.length >= updatedPlayers.filter(p => p.isAlive).length) {
           resolveRoundAuth(updatedPlayers, newCenter, latestLogs);
         } else {
-          // Next turn
           const nextP = updatedPlayers.find(p => p.id > playerId && p.isAlive) || updatedPlayers.find(p => p.isAlive);
           setPlayers(updatedPlayers);
           setCenterPile(newCenter);
@@ -293,7 +283,6 @@
           }
         });
 
-        // Refill hands
         updatedList = updatedList.map(p => {
           let newHand = [...p.hand];
           let newDeck = [...p.deck];
@@ -316,7 +305,6 @@
         syncToClients({ players: updatedList, centerPile: [], currentRound: nextRound, activeTurnId: firstAlive, logs: currentLogs.slice(0, 50) });
       };
 
-      // -- UI TRIGGER FOR CARD PLAY --
       const requestPlayCard = (destination) => {
         if (activeTurnId !== myId) return alert("Not your turn!");
         if (!selectedCard) return alert("Select a card!");
@@ -330,7 +318,6 @@
         }
       };
 
-      // -- BOT AUTOMATION (Host/Solo Only) --
       useEffect(() => {
         if (screen !== 'PLAYING' || networkMode === 'JOIN') return;
         
@@ -339,24 +326,22 @@
           clearTimeout(botTimerRef.current);
           botTimerRef.current = setTimeout(() => {
             if (activeP.hand.length > 0) {
-              const randomCard = activeP.hand[0]; // Simple bot logic: play first card to center
+              const randomCard = activeP.hand[0]; 
               handleCardPlayAuth(activeP.id, randomCard, 'CENTER');
             } else {
-              handleCardPlayAuth(activeP.id, null, 'PASS'); // Fallback if empty hand
+              handleCardPlayAuth(activeP.id, null, 'PASS'); 
             }
           }, 1500);
         }
         return () => clearTimeout(botTimerRef.current);
       }, [activeTurnId, screen, players]);
 
-      // -- RENDERERS --
       const myPlayer = players.find(p => p.id === myId) || {};
       const activePlayerObj = players.find(p => p.id === activeTurnId) || {};
 
       return (
         <div className="h-full w-full flex flex-col p-4 max-w-5xl mx-auto justify-center">
           
-          {/* MENU SCREEN */}
           {screen === 'MENU' && (
             <div className="flex flex-col items-center text-center space-y-6">
               <h1 className="text-4xl sm:text-6xl font-black bg-gradient-to-r from-red-600 to-amber-500 bg-clip-text text-transparent">
@@ -383,7 +368,6 @@
             </div>
           )}
 
-          {/* LOBBY SCREEN */}
           {screen === 'LOBBY' && (
             <div className="flex flex-col items-center text-center space-y-6">
               <h2 className="text-3xl font-black text-white">Online Room Lobby</h2>
@@ -411,11 +395,9 @@
             </div>
           )}
 
-          {/* PLAYING SCREEN */}
           {screen === 'PLAYING' && (
             <div className="flex flex-col space-y-4 flex-1 py-2">
               
-              {/* TOP HUD */}
               <div className="flex justify-between items-center bg-zinc-900 p-3 rounded-2xl border border-zinc-800 text-xs shadow">
                 <span className="font-bold text-zinc-300 px-2 py-1 bg-zinc-800 rounded-lg">Round {currentRound}</span>
                 <span className={`font-black uppercase px-4 py-1.5 rounded-full border ${activeTurnId === myId ? 'active-turn-indicator text-white bg-red-900' : 'border-zinc-700 text-amber-400 bg-zinc-800'}`}>
@@ -426,7 +408,6 @@
                 </span>
               </div>
 
-              {/* CENTER PILE */}
               <div className="flex-1 bg-zinc-900/60 border border-zinc-800 rounded-3xl p-6 flex flex-col items-center justify-center relative shadow-inner min-h-[220px]">
                 <div className="absolute top-4 left-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-zinc-950 px-2 py-1 rounded-md border border-zinc-800">
                   Center Pile ({centerPile.length}/{players.filter(p => p.isAlive).length})
@@ -445,7 +426,6 @@
                 </div>
               </div>
 
-              {/* CONTROLS & LOGS */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="md:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-3 h-32 overflow-y-auto text-xs font-mono text-zinc-400 space-y-1 shadow-inner">
                   {logs.map((l, i) => <div key={i} className={i === 0 ? 'text-zinc-100 font-bold' : ''}>&gt; {l}</div>)}
@@ -469,7 +449,6 @@
                 </div>
               </div>
 
-              {/* HAND TRAY */}
               <div className="p-4 rounded-3xl border bg-zinc-900/80 border-zinc-800 flex flex-col space-y-3 shadow-xl">
                 <div className="flex justify-between items-center px-1">
                   <span className="font-black text-zinc-200 text-sm tracking-wide">YOUR HAND ({myPlayer.name})</span>
