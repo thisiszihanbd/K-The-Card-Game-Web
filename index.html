@@ -3,41 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>K: The Card Game - Pro 3.1 Edition</title>
+  <title>K? The Card Game - Pro 3.1 Multiplayer</title>
 
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
       theme: {
         extend: {
-          colors: { brand: { red: '#dc2626', slate: '#09090b', emerald: '#10b981' } }
+          colors: {
+            brand: { red: '#dc2626', darkRed: '#7f1d1d', slate: '#09090b', cardBg: '#18181b', gold: '#f59e0b', emerald: '#10b981' }
+          },
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
         }
       }
     }
   </script>
 
+  <!-- React 18, Babel & PeerJS -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
   <style>
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: #09090b; }
     ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
-    body { touch-action: manipulation; user-select: none; background-color: #09090b; color: #f4f4f5; font-family: system-ui, sans-serif; }
-    
+    ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+    body {
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+      background-color: #09090b;
+      color: #f4f4f5;
+    }
+
     @keyframes pulseGlow {
       0%, 100% { box-shadow: 0 0 15px rgba(220, 38, 38, 0.4); }
       50% { box-shadow: 0 0 25px rgba(220, 38, 38, 0.9); }
     }
-    .active-turn-indicator { animation: pulseGlow 1.5s infinite ease-in-out; border-color: #dc2626; }
-    .card-3d { transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
-    .card-3d:hover { transform: translateY(-8px) scale(1.02); }
+    .active-turn-glow { animation: pulseGlow 1.5s infinite ease-in-out; border-color: #dc2626; }
+
+    @keyframes cardFlip {
+      0% { transform: rotateY(90deg) scale(1.1); opacity: 0; }
+      100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+    }
+    .card-flip-anim { animation: cardFlip 0.4s ease-out forwards; }
+
+    @keyframes fadeInUp {
+      0% { opacity: 0; transform: translateY(20px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
   </style>
 </head>
-<body class="h-full w-full overflow-x-hidden">
+<body class="h-full w-full overflow-x-hidden font-sans antialiased select-none">
   <div id="root" class="h-full w-full"></div>
 
   <script type="text/babel">
@@ -52,79 +76,210 @@
         osc.connect(gain);
         gain.connect(ctx.destination);
         const now = ctx.currentTime;
-        
         if (type === 'card') {
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(420, now);
-          osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
-          gain.gain.setValueAtTime(0.15, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-          osc.start(now);
-          osc.stop(now + 0.08);
+          osc.type = 'sine'; osc.frequency.setValueAtTime(420, now); osc.frequency.exponentialRampToValueAtTime(180, now + 0.08);
+          gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+          osc.start(now); osc.stop(now + 0.08);
+        } else if (type === 'play') {
+          osc.type = 'triangle'; osc.frequency.setValueAtTime(320, now); osc.frequency.exponentialRampToValueAtTime(640, now + 0.12);
+          gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+          osc.start(now); osc.stop(now + 0.12);
+        } else if (type === 'kill') {
+          osc.type = 'sawtooth'; osc.frequency.setValueAtTime(160, now); osc.frequency.exponentialRampToValueAtTime(35, now + 0.35);
+          gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.start(now); osc.stop(now + 0.35);
+        } else if (type === 'shield') {
+          osc.type = 'sine'; osc.frequency.setValueAtTime(600, now); osc.frequency.setValueAtTime(900, now + 0.08);
+          gain.gain.setValueAtTime(0.2, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+          osc.start(now); osc.stop(now + 0.2);
         } else if (type === 'win') {
-          osc.type = 'triangle';
-          osc.frequency.setValueAtTime(600, now);
-          gain.gain.setValueAtTime(0.2, now);
-          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
-          osc.start(now);
-          osc.stop(now + 0.4);
+          const notes = [523.25, 659.25, 783.99, 1046.50];
+          notes.forEach((freq, idx) => {
+            const subOsc = ctx.createOscillator(); const subGain = ctx.createGain();
+            subOsc.connect(subGain); subOsc.connect(ctx.destination);
+            subOsc.frequency.setValueAtTime(freq, now + idx * 0.1);
+            subGain.gain.setValueAtTime(0.2, now + idx * 0.1); subGain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.1 + 0.3);
+            subOsc.start(now + idx * 0.1); subOsc.stop(now + idx * 0.1 + 0.3);
+          });
         }
       } catch (e) {}
     };
 
-    const getExplicitPlayerName = (idx) => {
-      if (idx === 0) return 'Player One';
-      if (idx === 1) return 'Player Two';
-      if (idx === 2) return 'Player Three Bot';
-      if (idx === 3) return 'Player Four Bot';
-      return `Player ${idx + 1}`;
+    const eliminateAndDistributeCards = (eliminatedPId, playerList) => {
+      const victim = playerList.find(p => p.id === eliminatedPId);
+      if (!victim || !victim.isAlive) return playerList;
+      const cardsToDistribute = [...(victim.hand || []), ...(victim.deck || [])];
+      for (let i = cardsToDistribute.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cardsToDistribute[i], cardsToDistribute[j]] = [cardsToDistribute[j], cardsToDistribute[i]];
+      }
+      let updatedList = playerList.map(p => p.id === eliminatedPId ? { ...p, isAlive: false, revealedRole: true, hand: [], deck: [] } : p);
+      const survivors = updatedList.filter(p => p.isAlive);
+      if (survivors.length > 0 && cardsToDistribute.length > 0) {
+        cardsToDistribute.forEach((card, idx) => {
+          const recipientId = survivors[idx % survivors.length].id;
+          updatedList = updatedList.map(p => p.id === recipientId ? { ...p, deck: [card, ...p.deck] } : p);
+        });
+      }
+      return updatedList;
     };
 
-    const generateDecks = (playerCount) => {
-      let roles = ['KILLER', ...Array(playerCount - 1).fill('SAFE')].sort(() => Math.random() - 0.5);
+    const CLUE_TYPES = {
+      CCTV: { name: 'I Saw The CCTV Footage', desc: 'Scans and reveals which players hold a Kill card in hand.' },
+      SHOW_ME: { name: 'Show Me What You Got!', desc: 'Opens target player\'s hand cards for visual inspection.' },
+      SABOTAGE: { name: 'Sabotage', desc: 'Revokes up to 2 completed tasks to break progress and revoke Gift Card.' },
+      NEEDING: { name: "I'll Be Needing That", desc: 'Steal a specific card or Gift Card directly from target\'s hand.' },
+      CHANGE_PLAN: { name: 'Change of Plan', desc: 'All players pass their current hand to the player on their right.' },
+      EYES_ON_YOU: { name: 'I Have My Eyes on You!', desc: 'Blocks Center Pile plays for the rest of this round.' }
+    };
+
+    const generateDecks = (playerList) => {
+      const playerCount = playerList.length;
+      let killerCount = 1;
+      if (playerCount >= 6 && playerCount <= 8) killerCount = 2;
+      if (playerCount >= 9) killerCount = 3;
+
+      let roles = Array(killerCount).fill('KILLER').concat(Array(playerCount - killerCount).fill('SAFE'));
+      roles.sort(() => Math.random() - 0.5);
+
       let mainDeck = [];
-      
-      for (let p = 1; p <= playerCount; p++) {
-        for (let t = 1; t <= 4; t++) {
-          mainDeck.push({ id: `t_${p}_${t}_${Math.random()}`, type: 'TASK', targetPlayer: p, name: `${getExplicitPlayerName(p - 1)} Task ${t}`, desc: 'Complete for victory.' });
-        }
-        for (let k = 1; k <= 2; k++) {
-          mainDeck.push({ id: `k_${p}_${k}_${Math.random()}`, type: 'KILL', targetPlayer: p, name: 'Kill Card', desc: 'Lethal attack.' });
-        }
-        mainDeck.push({ id: `s_${p}_${Math.random()}`, type: 'SHIELD', name: 'Shield Card', desc: 'Blocks 1 attack.' });
+      playerList.forEach(p => {
+        for (let t = 1; t <= 4; t++) mainDeck.push({ id: `task_${p.id}_${t}_${Math.random()}`, type: 'TASK', targetPlayer: p.id, taskNum: t, name: `${p.name} Task ${t}`, desc: `Counts toward ${p.name}'s required tasks.` });
+        for (let k = 1; k <= 2; k++) mainDeck.push({ id: `kill_${p.id}_${k}_${Math.random()}`, type: 'KILL', targetPlayer: p.id, name: `${p.name} Kill Card`, desc: `Attacks ${p.name} unless blocked.` });
+        mainDeck.push({ id: `shield_${p.id}_${Math.random()}`, type: 'SHIELD', name: 'Shield Card', desc: 'Blocks 1 Kill Card attack.' });
+        mainDeck.push({ id: `nobee_${p.id}_${Math.random()}`, type: 'NOBEE', name: "Assistant's Nobee", desc: "Visually inspect target's full hand or inspect the Center Pile." });
+      });
+
+      let antikCount = playerCount <= 5 ? 1 : (playerCount <= 8 ? 2 : 3);
+      for (let a = 1; a <= antikCount; a++) mainDeck.push({ id: `antik_${a}_${Math.random()}`, type: 'ANTIK', name: "Detective's Antik", desc: "Make a high-stakes accusation!" });
+
+      const clueKeys = Object.keys(CLUE_TYPES);
+      let clueCount = playerCount === 4 ? 3 : (playerCount <= 6 ? 4 : (playerCount === 7 ? 5 : (playerCount <= 9 ? 6 : 7)));
+      for (let c = 0; c < clueCount; c++) {
+        const cKey = clueKeys[c % clueKeys.length];
+        mainDeck.push({ id: `clue_${c}_${Math.random()}`, type: 'CLUE', clueKey: cKey, name: CLUE_TYPES[cKey].name, desc: CLUE_TYPES[cKey].desc });
       }
 
       mainDeck.sort(() => Math.random() - 0.5);
-      
       const playerDecks = {};
       const playerHands = {};
-      for (let p = 1; p <= playerCount; p++) {
-        playerDecks[p] = mainDeck.splice(0, 9);
-        playerHands[p] = playerDecks[p].splice(0, 3);
-      }
+      playerList.forEach(p => {
+        playerDecks[p.id] = mainDeck.splice(0, 9);
+        playerHands[p.id] = playerDecks[p.id].splice(0, 3);
+      });
+
       return { roles, playerDecks, playerHands };
     };
 
+    function VisualCard({ card, onClick, isSelected, showTarget = true, extraBadge }) {
+      const getTypeStyle = (type) => {
+        switch(type) {
+          case 'TASK': return { badge: 'bg-emerald-950 text-emerald-400 border-emerald-800', border: 'border-emerald-600/60', icon: '✅' };
+          case 'KILL': return { badge: 'bg-red-950 text-red-400 border-red-800', border: 'border-red-600/80', icon: '🗡️' };
+          case 'SHIELD': return { badge: 'bg-blue-950 text-blue-400 border-blue-800', border: 'border-blue-600/60', icon: '🛡️' };
+          case 'NOBEE': return { badge: 'bg-purple-950 text-purple-400 border-purple-800', border: 'border-purple-600/60', icon: '🔍' };
+          case 'ANTIK': return { badge: 'bg-amber-950 text-amber-400 border-amber-800', border: 'border-amber-600/80', icon: '🕵️' };
+          case 'CLUE': return { badge: 'bg-cyan-950 text-cyan-400 border-cyan-800', border: 'border-cyan-600/60', icon: '💡' };
+          case 'GIFT': return { badge: 'bg-yellow-950 text-yellow-300 border-yellow-600', border: 'border-yellow-500', icon: '🎁' };
+          default: return { badge: 'bg-zinc-800 text-zinc-300 border-zinc-700', border: 'border-zinc-700', icon: '🃏' };
+        }
+      };
+      const style = getTypeStyle(card.type);
+      return (
+        <div onClick={onClick} className={`p-3 rounded-2xl border flex flex-col justify-between h-36 relative transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isSelected ? 'bg-red-950/80 border-red-500 ring-2 ring-red-500 scale-[1.02] shadow-lg shadow-red-900/40' : `bg-zinc-900/90 ${style.border}`}`}>
+          <div className="flex justify-between items-start">
+            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${style.badge}`}>{card.type}</span>
+            <span className="text-base">{style.icon}</span>
+          </div>
+          <div className="my-1">
+            <div className="text-[11px] font-black text-white leading-tight line-clamp-2">{card.name}</div>
+          </div>
+          <div className="text-[9px] text-zinc-400 leading-tight line-clamp-2">{card.desc}</div>
+          {extraBadge && <div className="absolute -top-2 -right-2 bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full shadow">{extraBadge}</div>}
+        </div>
+      );
+    }
+
     function App() {
-      const [screen, setScreen] = useState('MENU');
       const [networkMode, setNetworkMode] = useState('SOLO');
       const [roomCode, setRoomCode] = useState('');
       const [joinCode, setJoinCode] = useState('');
-      
-      const [players, setPlayers] = useState([]);
       const [myId, setMyId] = useState(1);
+      
+      const [gameState, setGameState] = useState('MENU');
+      const [playerCount, setPlayerCount] = useState(4);
+      const [players, setPlayers] = useState([]);
+      const [roundStartingIndex, setRoundStartingIndex] = useState(0);
+      const [turnQueue, setTurnQueue] = useState([]);
+      const [queueIndex, setQueueIndex] = useState(0);
       const [currentRound, setCurrentRound] = useState(1);
+      
       const [centerPile, setCenterPile] = useState([]);
-      const [activeTurnId, setActiveTurnId] = useState(1);
-      const [logs, setLogs] = useState(['Game initialized. Choose a mode.']);
+      const [centerPileBlocked, setCenterPileBlocked] = useState(false);
+      const [completedTasks, setCompletedTasks] = useState({});
+      const [giftCardHolder, setGiftCardHolder] = useState(null);
+      const [gameWinner, setGameWinner] = useState(null);
+      const [turnLogs, setTurnLogs] = useState(['Waiting to deploy match...']);
+      const [botThinkingStatus, setBotThinkingStatus] = useState(null);
+      
       const [selectedCard, setSelectedCard] = useState(null);
+      const [activeModal, setActiveModal] = useState(null);
+      const [modalData, setModalData] = useState(null);
+      const [modalOwnerId, setModalOwnerId] = useState(null);
 
       const peerRef = useRef(null);
       const connsRef = useRef([]);
-      const botTimerRef = useRef(null);
+      const botTimeoutRef = useRef(null);
 
-      const addLog = (msg) => setLogs(prev => [msg, ...prev.slice(0, 49)]);
+      const addLog = (msg) => setTurnLogs(prev => [msg, ...prev.slice(0, 49)]);
 
+      const setActiveModalFor = (modal, ownerId, data = null) => {
+        setActiveModal(modal);
+        setModalOwnerId(ownerId);
+        if (data !== null) setModalData(data);
+      };
+
+      // --- PEERJS MULTIPLAYER SYNC ---
+      useEffect(() => {
+        if (networkMode === 'HOST' || networkMode === 'SOLO') {
+          const stateToSync = {
+            gameState, players, roundStartingIndex, turnQueue, queueIndex, currentRound,
+            centerPile, centerPileBlocked, completedTasks, giftCardHolder, gameWinner,
+            turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus
+          };
+          if (networkMode === 'HOST') {
+            connsRef.current.forEach((c, idx) => c.send({ type: 'SYNC', state: stateToSync, assignedId: idx + 2 }));
+          }
+        }
+      }, [gameState, players, roundStartingIndex, turnQueue, queueIndex, currentRound, centerPile, centerPileBlocked, completedTasks, giftCardHolder, gameWinner, turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus, networkMode]);
+
+      const dispatchAction = (actionType, payload) => {
+        if (networkMode === 'JOIN') {
+          connsRef.current[0].send({ type: 'ACTION', actionType, payload });
+        } else {
+          processAction(actionType, payload);
+        }
+      };
+
+      const processAction = (actionType, payload) => {
+        switch(actionType) {
+          case 'PLAY_CARD': executeCardPlay(payload.pId, payload.card, payload.dest); break;
+          case 'RESOLVE_NOBEE': resolveNobeeAction(payload.targetPId, payload.mode); break;
+          case 'RESOLVE_SHOW_ME': resolveShowMeTargetSelect(payload.targetPId); break;
+          case 'RESOLVE_NEEDING': resolveNeedingTargetSelect(payload.targetPId); break;
+          case 'STEAL_SPECIFIC': resolveStealSpecificCard(payload.card, payload.targetPId); break;
+          case 'STEAL_GIFT': resolveStealGiftCard(payload.targetPId); break;
+          case 'SABOTAGE_TARGET': handleSabotageTargetSelect(payload.targetPId); break;
+          case 'SABOTAGE_REDISTRIBUTE': resolveSabotageRedistribute(payload.recipientPId); break;
+          case 'ANTIK_ACCUSE': resolveAntikAccusation(payload.accuserId, payload.targetId, players); break;
+          case 'TRIGGER_REVEAL': setActiveModalFor('REVEAL_ANIM', 'ALL', { pile: centerPile, currentPlayers: players }); break;
+          case 'FINALIZE_ROUND': finalizeResolution(payload.pile, players); break;
+          case 'CLOSE_MODAL': setActiveModalFor(null, null); advanceTurnQueue(); break;
+          default: break;
+        }
+      };
+
+      // --- NETWORKING LOBBY METHODS ---
       const hostRoom = () => {
         const code = 'K' + Math.floor(1000 + Math.random() * 9000);
         setRoomCode(code);
@@ -133,26 +288,15 @@
 
         peer.on('open', () => {
           setNetworkMode('HOST');
-          setScreen('LOBBY');
-          setPlayers([{ id: 1, name: 'Player One', isBot: false, role: 'SAFE', deck: [], hand: [], tasks: 0, isAlive: true }]);
+          setGameState('LOBBY');
+          setPlayers([{ id: 1, name: 'Player 1', isBot: false }]);
           setMyId(1);
-          addLog(`Room hosted: ${code}`);
         });
 
         peer.on('connection', (conn) => {
           connsRef.current.push(conn);
-          setPlayers(prev => {
-            const pId = prev.length + 1;
-            const newP = { id: pId, name: getExplicitPlayerName(pId - 1), isBot: false, role: 'SAFE', deck: [], hand: [], tasks: 0, isAlive: true };
-            addLog(`${newP.name} joined!`);
-            return [...prev, newP];
-          });
-
-          conn.on('data', (data) => {
-            if (data.type === 'PLAY_CARD') {
-              handleCardPlayAuth(data.playerId, data.card, data.destination);
-            }
-          });
+          setPlayers(prev => [...prev, { id: prev.length + 1, name: `Player ${prev.length + 1}`, isBot: false }]);
+          conn.on('data', data => { if (data.type === 'ACTION') processAction(data.actionType, data.payload); });
         });
       };
 
@@ -166,324 +310,712 @@
           const conn = peer.connect(code);
           connsRef.current = [conn];
 
-          conn.on('open', () => {
-            setNetworkMode('JOIN');
-            setScreen('LOBBY');
-            setRoomCode(code);
-            addLog(`Connected to ${code}. Waiting for host...`);
-          });
+          conn.on('open', () => { setNetworkMode('JOIN'); setGameState('LOBBY'); setRoomCode(code); });
 
-          conn.on('data', (data) => {
+          conn.on('data', data => {
             if (data.type === 'SYNC') {
-              setPlayers(data.players);
-              setCurrentRound(data.currentRound);
-              setCenterPile(data.centerPile);
-              setActiveTurnId(data.activeTurnId);
-              setMyId(data.assignedId);
-              setLogs(data.logs);
-              if (screen !== 'PLAYING') setScreen('PLAYING');
+              setPlayers(data.state.players);
+              setGameState(data.state.gameState);
+              setTurnQueue(data.state.turnQueue);
+              setQueueIndex(data.state.queueIndex);
+              setRoundStartingIndex(data.state.roundStartingIndex);
+              setCurrentRound(data.state.currentRound);
+              setCenterPile(data.state.centerPile);
+              setCenterPileBlocked(data.state.centerPileBlocked);
+              setCompletedTasks(data.state.completedTasks);
+              setGiftCardHolder(data.state.giftCardHolder);
+              setGameWinner(data.state.gameWinner);
+              setTurnLogs(data.state.turnLogs);
+              setActiveModal(data.state.activeModal);
+              setModalData(data.state.modalData);
+              setModalOwnerId(data.state.modalOwnerId);
+              setBotThinkingStatus(data.state.botThinkingStatus);
+              if (data.assignedId) setMyId(data.assignedId);
             }
           });
         });
       };
 
-      const syncToClients = (stateUpdates) => {
-        if (networkMode !== 'HOST') return;
-        connsRef.current.forEach((conn, idx) => {
-          conn.send({
-            type: 'SYNC',
-            assignedId: idx + 2,
-            ...stateUpdates
-          });
-        });
-      };
+      // --- GAME SETUP ---
+      const startGame = (mode) => {
+        playAudioFx('play');
+        let pList = [];
+        let hCount = 1;
+        let bCount = 1;
 
-      const startMatch = (isSolo) => {
-        let currentPlayers = [...players];
-        if (isSolo) {
-          currentPlayers = [{ id: 1, name: 'Player One', isBot: false, role: 'SAFE', deck: [], hand: [], tasks: 0, isAlive: true }];
-          setNetworkMode('SOLO');
-          setMyId(1);
+        if (mode === 'SOLO') {
+          setNetworkMode('SOLO'); setMyId(1);
+          pList.push({ id: 1, name: `Player ${hCount++}`, isBot: false });
+          while (pList.length < playerCount) pList.push({ id: pList.length + 1, name: `Bot ${bCount++}`, isBot: true });
+        } else if (mode === 'HOST') {
+          pList = [...players];
+          pList.forEach(p => { if (!p.isBot) p.name = `Player ${hCount++}`; });
+          while (pList.length < playerCount) pList.push({ id: pList.length + 1, name: `Bot ${bCount++}`, isBot: true });
         }
 
-        while (currentPlayers.length < 4) {
-          const bId = currentPlayers.length + 1;
-          currentPlayers.push({ id: bId, name: getExplicitPlayerName(bId - 1), isBot: true, role: 'SAFE', deck: [], hand: [], tasks: 0, isAlive: true });
-        }
+        const { roles, playerDecks, playerHands } = generateDecks(pList);
+        pList = pList.map((p, idx) => ({ ...p, role: roles[idx], deck: playerDecks[p.id], hand: playerHands[p.id], isAlive: true, revealedRole: false }));
+        
+        const initialQueue = pList.filter(p => p.isAlive).map(p => p.id);
+        const initTasks = {}; pList.forEach(p => initTasks[p.id] = []);
 
-        const { roles, playerDecks, playerHands } = generateDecks(currentPlayers.length);
-        const readyPlayers = currentPlayers.map((p, idx) => ({
-          ...p, role: roles[idx], deck: playerDecks[p.id], hand: playerHands[p.id]
-        }));
-
-        setPlayers(readyPlayers);
-        setActiveTurnId(1);
-        setCenterPile([]);
+        setPlayers(pList);
+        setCompletedTasks(initTasks);
+        setTurnQueue(initialQueue);
+        setQueueIndex(0);
+        setRoundStartingIndex(0);
         setCurrentRound(1);
-        setScreen('PLAYING');
-        const newLogs = ['Match started! Auto-bots filled. Round 1 begins.'];
-        setLogs(newLogs);
-
-        syncToClients({ players: readyPlayers, activeTurnId: 1, centerPile: [], currentRound: 1, logs: newLogs });
-      };
-
-      const handleCardPlayAuth = (playerId, card, destination) => {
-        let updatedPlayers = [...players];
-        const playerIdx = updatedPlayers.findIndex(p => p.id === playerId);
-        const pObj = updatedPlayers[playerIdx];
-
-        if (card) {
-          updatedPlayers[playerIdx] = { ...pObj, hand: pObj.hand.filter(c => c.id !== card.id) };
-        }
-        
-        let newCenter = [...centerPile];
-        let latestLogs = [...logs];
-        
-        if (destination === 'CENTER' && card) {
-          newCenter.push({ ...card, playedBy: pObj.name });
-          latestLogs.unshift(`🃏 ${pObj.name} played a card face-down.`);
-        } else if (card) {
-          const nextAlive = updatedPlayers.find(p => p.id > playerId && p.isAlive) || updatedPlayers.find(p => p.isAlive);
-          if (nextAlive) {
-            const nIdx = updatedPlayers.findIndex(p => p.id === nextAlive.id);
-            updatedPlayers[nIdx].deck.unshift(card);
-            latestLogs.unshift(`➡️ ${pObj.name} passed a card to ${nextAlive.name}.`);
-          }
-        } else {
-          latestLogs.unshift(`⏭️ ${pObj.name} had no cards and passed their turn.`);
-        }
-
-        playAudioFx('card');
-
-        if (newCenter.length >= updatedPlayers.filter(p => p.isAlive).length) {
-          resolveRoundAuth(updatedPlayers, newCenter, latestLogs);
-        } else {
-          const nextP = updatedPlayers.find(p => p.id > playerId && p.isAlive) || updatedPlayers.find(p => p.isAlive);
-          setPlayers(updatedPlayers);
-          setCenterPile(newCenter);
-          setActiveTurnId(nextP.id);
-          setLogs(latestLogs.slice(0, 50));
-          syncToClients({ players: updatedPlayers, centerPile: newCenter, activeTurnId: nextP.id, currentRound, logs: latestLogs.slice(0, 50) });
-        }
-      };
-
-      const resolveRoundAuth = (currentPList, currentCenter, currentLogs) => {
-        currentLogs.unshift(`🔄 Resolving Round ${currentRound}... Deck shuffled.`);
-        playAudioFx('win');
-
-        let updatedList = [...currentPList];
-        
-        currentCenter.forEach(c => {
-          if (c.type === 'TASK') {
-            const tIdx = updatedList.findIndex(p => p.id === c.targetPlayer);
-            if (tIdx > -1) {
-              updatedList[tIdx].tasks += 1;
-              currentLogs.unshift(`✅ ${updatedList[tIdx].name} completed a task!`);
-            }
-          }
-        });
-
-        updatedList = updatedList.map(p => {
-          let newHand = [...p.hand];
-          let newDeck = [...p.deck];
-          while (newHand.length < 3 && newDeck.length > 0) {
-            newHand.push(newDeck.shift());
-          }
-          return { ...p, hand: newHand, deck: newDeck };
-        });
-
-        const nextRound = currentRound + 1;
-        const firstAlive = updatedList.find(p => p.isAlive).id;
-
-        setPlayers(updatedList);
         setCenterPile([]);
-        setCurrentRound(nextRound);
-        setActiveTurnId(firstAlive);
-        setLogs(currentLogs.slice(0, 50));
-        setSelectedCard(null);
-
-        syncToClients({ players: updatedList, centerPile: [], currentRound: nextRound, activeTurnId: firstAlive, logs: currentLogs.slice(0, 50) });
+        setCenterPileBlocked(false);
+        setGiftCardHolder(null);
+        setGameWinner(null);
+        setActiveModalFor(null, null);
+        setTurnLogs([`🎮 Match live! Dynamic players locked in.`]);
+        setGameState('PLAYING');
       };
 
-      const requestPlayCard = (destination) => {
-        if (activeTurnId !== myId) return alert("Not your turn!");
-        if (!selectedCard) return alert("Select a card!");
-        
-        if (networkMode === 'JOIN') {
-          connsRef.current[0].send({ type: 'PLAY_CARD', playerId: myId, card: selectedCard, destination });
-          setSelectedCard(null);
-        } else {
-          handleCardPlayAuth(myId, selectedCard, destination);
-          setSelectedCard(null);
-        }
-      };
-
-      useEffect(() => {
-        if (screen !== 'PLAYING' || networkMode === 'JOIN') return;
-        
-        const activeP = players.find(p => p.id === activeTurnId);
-        if (activeP && activeP.isBot) {
-          clearTimeout(botTimerRef.current);
-          botTimerRef.current = setTimeout(() => {
-            if (activeP.hand.length > 0) {
-              const randomCard = activeP.hand[0]; 
-              handleCardPlayAuth(activeP.id, randomCard, 'CENTER');
-            } else {
-              handleCardPlayAuth(activeP.id, null, 'PASS'); 
-            }
-          }, 1500);
-        }
-        return () => clearTimeout(botTimerRef.current);
-      }, [activeTurnId, screen, players]);
-
+      const activePlayerId = turnQueue[queueIndex] || null;
+      const activePlayer = players.find(p => p.id === activePlayerId) || null;
       const myPlayer = players.find(p => p.id === myId) || {};
-      const activePlayerObj = players.find(p => p.id === activeTurnId) || {};
+
+      // --- BOT AUTOMATION ---
+      useEffect(() => {
+        if (gameState !== 'PLAYING' || !activePlayer || !activePlayer.isBot || !activePlayer.isAlive) return;
+        if (networkMode === 'JOIN') return; // Only host/solo runs bots
+
+        setBotThinkingStatus(`${activePlayer.name} is making a move...`);
+        botTimeoutRef.current = setTimeout(() => {
+          executeBotDecision(activePlayer);
+        }, 1500);
+
+        return () => clearTimeout(botTimeoutRef.current);
+      }, [gameState, queueIndex, turnQueue, networkMode, activePlayer]);
+
+      const executeBotDecision = (bot) => {
+        const hand = bot.hand || [];
+        if (hand.length === 0) {
+          addLog(`🤖 ${bot.name} passes turn due to empty hand.`);
+          advanceTurnQueue();
+          return;
+        }
+
+        let cardToPlay = hand[0];
+        let destination = 'CENTER';
+
+        const playableSpecials = hand.filter(c => {
+          if (c.type === 'ANTIK') return bot.role === 'SAFE' && currentRound >= 3;
+          return ['NOBEE', 'CLUE', 'GIFT'].includes(c.type);
+        });
+
+        if (playableSpecials.length > 0 && Math.random() > 0.4) {
+          cardToPlay = playableSpecials[Math.floor(Math.random() * playableSpecials.length)];
+          destination = 'FACE_UP';
+        } else if (bot.role === 'KILLER') {
+          const killCard = hand.find(c => c.type === 'KILL');
+          if (killCard && !centerPileBlocked) { cardToPlay = killCard; destination = 'CENTER'; }
+          else { destination = 'NEXT_DECK'; }
+        } else {
+          const taskCard = hand.find(c => c.type === 'TASK');
+          const shieldCard = hand.find(c => c.type === 'SHIELD');
+          const killCard = hand.find(c => c.type === 'KILL');
+
+          if (taskCard && !centerPileBlocked) { cardToPlay = taskCard; destination = 'CENTER'; }
+          else if (shieldCard && !centerPileBlocked) { cardToPlay = shieldCard; destination = 'CENTER'; }
+          else if (killCard) { cardToPlay = killCard; destination = 'NEXT_DECK'; }
+          else { destination = 'NEXT_DECK'; }
+        }
+
+        executeCardPlay(bot.id, cardToPlay, destination);
+      };
+
+      // --- CARD EXECUTION ENGINE ---
+      const executeCardPlay = (playerId, card, destination) => {
+        playAudioFx('play');
+        setBotThinkingStatus(null);
+        let updatedPlayers = players.map(p => p.id === playerId ? { ...p, hand: p.hand.filter(c => c.id !== card.id) } : p);
+        let updatedPile = [...centerPile];
+
+        if (destination === 'CENTER') {
+          updatedPile.push({ ...card, playedBy: playerId });
+          addLog(`🂠 ${getPlayerName(playerId)} played a card into Center Pile.`);
+        } else if (destination === 'NEXT_DECK') {
+          let nextPIdx = (updatedPlayers.findIndex(p => p.id === playerId) + 1) % updatedPlayers.length;
+          while (!updatedPlayers[nextPIdx].isAlive) nextPIdx = (nextPIdx + 1) % updatedPlayers.length;
+          const targetPlayer = updatedPlayers[nextPIdx];
+          updatedPlayers[nextPIdx].deck = [card, ...updatedPlayers[nextPIdx].deck];
+          addLog(`🤝 ${getPlayerName(playerId)} passed a card to ${targetPlayer.name}'s Deck.`);
+        } else if (destination === 'FACE_UP') {
+          addLog(`📢 ${getPlayerName(playerId)} dropped ${card.name} FACE-UP!`);
+          if (card.type === 'NOBEE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleNobeePlay(playerId, card, updatedPlayers); return; }
+          else if (card.type === 'ANTIK') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleAntikPlay(playerId, card, updatedPlayers); return; }
+          else if (card.type === 'GIFT') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleGiftPlay(playerId, card, updatedPlayers); return; }
+          else if (card.type === 'CLUE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleCluePlay(playerId, card, updatedPlayers); return; }
+        }
+
+        setPlayers(updatedPlayers);
+        setCenterPile(updatedPile);
+        setSelectedCard(null);
+        advanceTurnQueue(updatedPlayers);
+      };
+
+      const getPlayerName = (pId) => {
+        const found = players.find(p => p.id === pId);
+        return found ? found.name : `Player ${pId}`;
+      };
+
+      const advanceTurnQueue = (latestPlayers = players) => {
+        const nextQIdx = queueIndex + 1;
+        if (nextQIdx >= turnQueue.length) {
+          setTimeout(() => setActiveModalFor('REVEAL_ANIM', 'ALL', { pile: centerPile, currentPlayers: latestPlayers }), 600);
+        } else {
+          setQueueIndex(nextQIdx);
+        }
+      };
+
+      // --- SPECIAL CARD RESOLUTIONS ---
+      const handleNobeePlay = (pId, card, currentPlayers) => {
+        const actor = currentPlayers.find(p => p.id === pId);
+        if (actor.isBot) {
+          if (Math.random() > 0.5 && centerPile.length > 0) addLog(`🔍 ${actor.name} scanned the Center Pile.`);
+          else {
+            const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive);
+            addLog(`🔍 ${actor.name} scanned ${targets[Math.floor(Math.random() * targets.length)].name}'s hand.`);
+          }
+          advanceTurnQueue(currentPlayers);
+        } else {
+          setActiveModalFor('NOBEE_CHOICE', pId);
+        }
+      };
+
+      const resolveNobeeAction = (targetPId, mode) => {
+        if (mode === 'CENTER_PILE') {
+          playAudioFx('card'); addLog(`🔍 NOBEE: Inspected ${centerPile.length} cards in Center Pile.`);
+          setActiveModalFor('VISUAL_CARD_PEEK', activePlayer.id, { title: `Center Pile Inspection`, cards: centerPile, isCenter: true });
+        } else if (mode === 'HAND') {
+          const target = players.find(p => p.id === targetPId);
+          playAudioFx('card'); addLog(`🔍 NOBEE: Inspected ${target.name}'s hand.`);
+          setActiveModalFor('VISUAL_CARD_PEEK', activePlayer.id, { title: `${target.name}'s Hand Cards`, cards: target.hand, isCenter: false });
+        }
+      };
+
+      const handleCluePlay = (pId, card, currentPlayers) => {
+        const clueKey = card.clueKey;
+        const actor = currentPlayers.find(p => p.id === pId);
+
+        if (clueKey === 'SHOW_ME') {
+          if (actor.isBot) { addLog(`📢 "Show Me": ${actor.name} forced an inspection.`); advanceTurnQueue(currentPlayers); }
+          else setActiveModalFor('SHOW_ME_TARGET', pId);
+        } else if (clueKey === 'NEEDING') {
+          if (actor.isBot) { addLog(`🪝 "I'll Be Needing That": ${actor.name} stole a card.`); advanceTurnQueue(currentPlayers); }
+          else setActiveModalFor('NEEDING_TARGET', pId);
+        } else if (clueKey === 'SABOTAGE') {
+          if (actor.isBot) { addLog(`💥 Sabotage triggered by ${actor.name}.`); advanceTurnQueue(currentPlayers); }
+          else setActiveModalFor('SABOTAGE_TARGET', pId);
+        } else if (clueKey === 'CCTV') {
+          playAudioFx('shield');
+          const armedPlayers = currentPlayers.filter(p => p.id !== pId && p.isAlive && p.hand.some(c => c.type === 'KILL'));
+          setActiveModalFor('CCTV_MODAL', pId, { armedPlayers });
+          addLog(armedPlayers.length > 0 ? `📹 CCTV: Kill cards detected on ${armedPlayers.map(p=>p.name).join(', ')}!` : `📹 CCTV: No active Kill cards found!`);
+        } else if (clueKey === 'EYES_ON_YOU') {
+          setCenterPileBlocked(true); addLog(`👁️ "Eyes On You": Center Pile blocked!`); advanceTurnQueue(currentPlayers);
+        } else if (clueKey === 'CHANGE_PLAN') {
+          playAudioFx('card');
+          const newPlayers = [...currentPlayers];
+          const hands = newPlayers.map(p => p.hand);
+          for (let i = 0; i < newPlayers.length; i++) newPlayers[i].hand = hands[(i - 1 + newPlayers.length) % newPlayers.length];
+          addLog(`🔄 Change of Plan! Everyone passes hands right!`);
+          setPlayers(newPlayers); advanceTurnQueue(newPlayers);
+        }
+      };
+
+      const resolveShowMeTargetSelect = (targetPId) => {
+        const target = players.find(p => p.id === targetPId); playAudioFx('card');
+        addLog(`📢 "Show Me": Revealing ${target.name}'s hand.`);
+        setActiveModalFor('VISUAL_CARD_PEEK', activePlayer.id, { title: `Revealed: ${target.name}'s Hand`, cards: target.hand, isCenter: false });
+      };
+
+      const resolveNeedingTargetSelect = (targetPId) => {
+        const target = players.find(p => p.id === targetPId);
+        setActiveModalFor('STEAL_CARD_MODAL', activePlayer.id, { target });
+      };
+
+      const resolveStealSpecificCard = (stolenCard, targetPId) => {
+        const updated = players.map(p => {
+          if (p.id === targetPId) return { ...p, hand: p.hand.filter(c => c.id !== stolenCard.id) };
+          if (p.id === activePlayer.id) return { ...p, hand: [...p.hand, stolenCard] };
+          return p;
+        });
+        playAudioFx('card'); setPlayers(updated);
+        addLog(`🪝 Stole [${stolenCard.name}] from ${getPlayerName(targetPId)}!`);
+        setActiveModalFor(null, null); advanceTurnQueue(updated);
+      };
+
+      const resolveStealGiftCard = (targetPId) => {
+        setGiftCardHolder(activePlayer.id); playAudioFx('win');
+        addLog(`🪝 STOLE THE GIFT CARD from ${getPlayerName(targetPId)}!`);
+        setActiveModalFor(null, null); advanceTurnQueue();
+      };
+
+      const handleSabotageTargetSelect = (targetPId) => {
+        const targetTasks = completedTasks[targetPId] || [];
+        const removed = targetTasks.slice(0, Math.min(2, targetTasks.length));
+        const remaining = targetTasks.slice(Math.min(2, targetTasks.length));
+        setActiveModalFor('SABOTAGE_REDISTRIBUTE', activePlayer.id, { targetPId, removed, remaining });
+      };
+
+      const resolveSabotageRedistribute = (recipientPId) => {
+        const { targetPId, removed, remaining } = modalData;
+        const newTasksMap = { ...completedTasks, [targetPId]: remaining, [recipientPId]: [...(completedTasks[recipientPId] || []), ...removed] };
+        if (remaining.length < 4 && Number(giftCardHolder) === targetPId) { setGiftCardHolder(null); addLog(`💥 Sabotage broke the task streak! GIFT CARD REVOKED!`); }
+        setCompletedTasks(newTasksMap); addLog(`💥 Sabotage: Moved ${removed.length} tasks from ${getPlayerName(targetPId)} to ${getPlayerName(recipientPId)}!`);
+        setActiveModalFor(null, null); advanceTurnQueue();
+      };
+
+      const handleAntikPlay = (pId, card, currentPlayers) => {
+        const actor = currentPlayers.find(p => p.id === pId);
+        if (actor.role === 'KILLER') {
+          playAudioFx('kill'); addLog(`🚨 RULE ENFORCED: ${actor.name} (KILLER) played Antik and is ELIMINATED!`);
+          const updated = eliminateAndDistributeCards(pId, currentPlayers);
+          setPlayers(updated); if (!checkWinConditions(updated)) advanceTurnQueue(updated);
+          return;
+        }
+        if (actor.isBot) {
+          const target = currentPlayers.find(p => p.id !== pId && p.isAlive);
+          if (target) resolveAntikAccusation(pId, target.id, currentPlayers);
+        } else { setActiveModalFor('ANTIK', pId); }
+      };
+
+      const resolveAntikAccusation = (accuserId, targetId, currentPlayers) => {
+        const target = currentPlayers.find(p => p.id === targetId);
+        addLog(`🕵️ Antik Verdict: ${getPlayerName(accuserId)} accuses ${target.name}!`);
+        if (target.role === 'KILLER') {
+          playAudioFx('win'); addLog(`🎯 CORRECT! ${target.name} was a KILLER!`);
+          const updated = eliminateAndDistributeCards(targetId, currentPlayers);
+          setPlayers(updated); setActiveModalFor(null, null);
+          if (!checkWinConditions(updated)) advanceTurnQueue(updated);
+        } else {
+          playAudioFx('kill'); addLog(`❌ WRONG! ${target.name} was SAFE. Killer team wins!`);
+          setActiveModalFor(null, null); triggerGameOver('KILLER', currentPlayers);
+        }
+      };
+
+      const handleGiftPlay = (pId, card, currentPlayers) => {
+        const actor = currentPlayers.find(p => p.id === pId);
+        addLog(`🎁 ${actor.name} activates GIFT CARD!`);
+        if (actor.role === 'KILLER') { playAudioFx('win'); triggerGameOver('KILLER', currentPlayers); }
+        else {
+          if (actor.isBot) {
+            const target = currentPlayers.find(p => p.id !== pId && p.isAlive);
+            if (target) resolveAntikAccusation(pId, target.id, currentPlayers);
+          } else setActiveModalFor('ANTIK', pId);
+        }
+      };
+
+      const finalizeResolution = (pileToResolve, currentPlayers) => {
+        setActiveModalFor(null, null);
+        let updatedPlayers = [...currentPlayers];
+        let newTasksMap = { ...completedTasks };
+
+        const tasksInPile = pileToResolve.filter(c => c.type === 'TASK');
+        const killsInPile = pileToResolve.filter(c => c.type === 'KILL');
+        const shieldsInPile = pileToResolve.filter(c => c.type === 'SHIELD');
+
+        tasksInPile.forEach(tCard => {
+          const targetPId = tCard.targetPlayer;
+          const currentList = newTasksMap[targetPId] || [];
+          if (!currentList.some(t => t.id === tCard.id)) {
+            const updated = [...currentList, tCard]; newTasksMap[targetPId] = updated;
+            addLog(`✅ ${getPlayerName(targetPId)} completed a Task!`);
+            if (updated.length >= 4 && giftCardHolder === null) {
+              setGiftCardHolder(targetPId); playAudioFx('win'); addLog(`🎁 ${getPlayerName(targetPId)} secured 4 Tasks and earned the GIFT CARD!`);
+              updatedPlayers = updatedPlayers.map(p => p.id === targetPId ? { ...p, hand: [...p.hand, { id: `gift_${Math.random()}`, type: 'GIFT', name: 'Gift Card', desc: 'Auto-win for Killer, free Antik for Safe.' }] } : p);
+            }
+          }
+        });
+        setCompletedTasks(newTasksMap);
+
+        let availableShields = shieldsInPile.length;
+        const validKills = killsInPile.filter(kCard => updatedPlayers.find(p => p.id === kCard.targetPlayer)?.isAlive);
+        
+        if (validKills.length > 0) {
+          if (availableShields >= validKills.length) {
+            validKills.forEach(k => addLog(`🛡️ Shield blocked Kill on ${getPlayerName(k.targetPlayer)}!`));
+          } else {
+            const shuffledKills = [...validKills].sort(() => Math.random() - 0.5);
+            shuffledKills.slice(0, availableShields).forEach(k => addLog(`🛡️ Shield blocked Kill on ${getPlayerName(k.targetPlayer)}!`));
+            shuffledKills.slice(availableShields).forEach(kCard => {
+              const target = updatedPlayers.find(p => p.id === kCard.targetPlayer);
+              if (target && target.isAlive) {
+                playAudioFx('kill'); addLog(`🗡️ ${target.name} ASSASSINATED! Role: ${target.role}`);
+                updatedPlayers = eliminateAndDistributeCards(target.id, updatedPlayers);
+              }
+            });
+          }
+        }
+
+        setPlayers(updatedPlayers);
+        if (checkWinConditions(updatedPlayers)) return;
+
+        const survivingPlayers = updatedPlayers.filter(p => p.isAlive);
+        const nextStartIdx = (roundStartingIndex + 1) % survivingPlayers.length;
+        setRoundStartingIndex(nextStartIdx);
+
+        const newQueue = [];
+        for (let i = 0; i < survivingPlayers.length; i++) newQueue.push(survivingPlayers[(nextStartIdx + i) % survivingPlayers.length].id);
+
+        updatedPlayers = updatedPlayers.map(p => {
+          if (!p.isAlive) return p;
+          let cH = [...p.hand]; let cD = [...p.deck];
+          while (cH.length < 3 && cD.length > 0) cH.push(cD.shift());
+          return { ...p, hand: cH, deck: cD };
+        });
+
+        setPlayers(updatedPlayers); setTurnQueue(newQueue); setQueueIndex(0); setCurrentRound(prev => prev + 1);
+        setCenterPile([]); setCenterPileBlocked(false); addLog(`🔄 --- Round ${currentRound + 1} Deployed ---`);
+      };
+
+      const checkWinConditions = (currentPlayers) => {
+        const alive = currentPlayers.filter(p => p.isAlive);
+        const aliveKillers = alive.filter(p => p.role === 'KILLER');
+        const aliveSafe = alive.filter(p => p.role === 'SAFE');
+        if (aliveKillers.length === 0) { triggerGameOver('SAFE', currentPlayers); return true; }
+        if (aliveSafe.length === 0 || aliveKillers.length >= aliveSafe.length) { triggerGameOver('KILLER', currentPlayers); return true; }
+        return false;
+      };
+
+      const triggerGameOver = (winnerTeam, currentPlayers) => {
+        playAudioFx('win'); setGameWinner(winnerTeam); setGameState('GAME_OVER'); addLog(`🏆 ${winnerTeam} WINS!`);
+        try { confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); } catch (e) {}
+      };
+
+      // Ensure active opponents are derived correctly without self
+      const otherPlayers = players.filter(p => p.id !== myId);
 
       return (
-        <div className="h-full w-full flex flex-col p-4 max-w-5xl mx-auto justify-center">
+        <div className="h-full w-full flex flex-col justify-between max-w-lg mx-auto bg-zinc-950 border-x border-zinc-800 shadow-2xl relative overflow-hidden">
           
-          {screen === 'MENU' && (
-            <div className="flex flex-col items-center text-center space-y-6">
-              <h1 className="text-4xl sm:text-6xl font-black bg-gradient-to-r from-red-600 to-amber-500 bg-clip-text text-transparent">
-                K: THE CARD GAME
-              </h1>
-              <p className="text-zinc-400 text-sm max-w-sm">Play offline against bots or host clean K-Codes for online P2P multiplayer.</p>
-              
-              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl w-full max-w-sm space-y-4 shadow-xl">
-                <button onClick={() => startMatch(true)} className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 font-bold rounded-xl text-white shadow transition">
-                  PLAY SOLO VS BOTS
-                </button>
-                <div className="border-t border-zinc-800 pt-2"></div>
-                <button onClick={hostRoom} className="w-full py-3.5 bg-red-600 hover:bg-red-500 font-bold rounded-xl text-white shadow transition">
-                  CREATE ONLINE ROOM
-                </button>
-                <div className="flex space-x-2 pt-2">
-                  <input type="text" placeholder="K1234" value={joinCode} onChange={e => setJoinCode(e.target.value)}
-                    className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
-                  <button onClick={joinRoom} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 font-bold rounded-xl text-white border border-zinc-700 text-sm">
-                    JOIN
+          {/* MENU SCREEN */}
+          {gameState === 'MENU' && (
+            <div className="flex-1 p-6 flex flex-col justify-center text-center overflow-y-auto">
+              <div className="inline-block p-4 rounded-3xl bg-red-950/60 border border-red-700/80 mb-2 mx-auto w-max">
+                <span className="text-5xl font-black text-red-500 tracking-tighter">K?</span>
+              </div>
+              <h1 className="text-2xl font-black text-white tracking-tight mb-6">THE CARD GAME</h1>
+
+              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-left space-y-5">
+                <div>
+                  <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Total Participants: <span className="text-red-500 text-sm">{playerCount}</span></label>
+                  <input type="range" min="4" max="10" value={playerCount} onChange={e => setPlayerCount(Number(e.target.value))} className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg cursor-pointer" />
+                </div>
+                <div className="border-t border-zinc-800 pt-5 space-y-3">
+                  <button onClick={() => startGame('SOLO')} className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm rounded-xl shadow-lg active:scale-95 transition-all">
+                    PLAY SOLO VS BOTS
                   </button>
+                  <button onClick={hostRoom} className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-black text-sm rounded-xl shadow-lg active:scale-95 transition-all">
+                    HOST ONLINE ROOM
+                  </button>
+                </div>
+                <div className="flex space-x-2 pt-2 border-t border-zinc-800">
+                  <input type="text" placeholder="K1234" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
+                  <button onClick={joinRoom} className="px-5 py-3 bg-zinc-800 hover:bg-zinc-700 font-bold rounded-xl text-white border border-zinc-700 text-sm">JOIN</button>
                 </div>
               </div>
             </div>
           )}
 
-          {screen === 'LOBBY' && (
-            <div className="flex flex-col items-center text-center space-y-6">
-              <h2 className="text-3xl font-black text-white">Online Room Lobby</h2>
-              <div className="text-5xl font-mono font-black text-red-500 bg-zinc-900 border border-zinc-800 px-8 py-4 rounded-2xl tracking-widest shadow-inner">
+          {/* LOBBY SCREEN */}
+          {gameState === 'LOBBY' && (
+            <div className="flex-1 p-6 flex flex-col justify-center text-center">
+              <h2 className="text-2xl font-black text-white mb-6">Online P2P Lobby</h2>
+              <div className="text-5xl font-mono font-black text-red-500 bg-zinc-900 border border-zinc-800 px-8 py-4 rounded-2xl tracking-widest mx-auto shadow-inner mb-4">
                 {roomCode}
               </div>
-              <p className="text-zinc-400 text-sm max-w-xs">Empty slots will automatically fill with <b>Player Three Bot</b> & <b>Player Four Bot</b> on start!</p>
-              
-              <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-2xl w-full max-w-sm text-left space-y-2">
-                <div className="text-xs font-bold text-zinc-500">CONNECTED PLAYERS:</div>
-                {players.map((p) => (
-                  <div key={p.id} className="text-white font-semibold flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> {p.name}
+              <p className="text-zinc-400 text-xs mb-6 px-4">Empty slots will adaptively fill as explicit Bot players when the Host starts.</p>
+              <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-2xl w-full text-left space-y-2 mb-8">
+                <div className="text-xs font-bold text-zinc-500 mb-2">CONNECTED ROSTER:</div>
+                {players.map(p => (
+                  <div key={p.id} className="text-white font-semibold flex items-center gap-2 text-sm">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> {p.name} {p.id === myId && '(You)'}
                   </div>
                 ))}
               </div>
-
               {networkMode === 'HOST' ? (
-                <button onClick={() => startMatch(false)} className="px-8 py-4 bg-red-600 hover:bg-red-500 font-black rounded-2xl text-white shadow-xl transition active:scale-95">
-                  START MATCH & FILL BOTS
-                </button>
+                <button onClick={() => startGame('HOST')} className="w-full py-4 bg-red-600 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-all">LAUNCH MATCH</button>
               ) : (
-                <p className="text-amber-400 text-sm font-bold animate-pulse">Waiting for host to start...</p>
+                <p className="text-amber-400 text-sm font-bold animate-pulse">Waiting for host to launch...</p>
               )}
             </div>
           )}
 
-          {screen === 'PLAYING' && (
-            <div className="flex flex-col space-y-4 flex-1 py-2">
+          {/* 2D RESPONSIVE GAMEPLAY UI */}
+          {(gameState === 'PLAYING' || gameState === 'RESOLVING') && (
+            <div className="flex-1 flex flex-col relative w-full h-full bg-zinc-950 p-3 pt-6">
               
-              <div className="flex justify-between items-center bg-zinc-900 p-3 rounded-2xl border border-zinc-800 text-xs shadow">
-                <span className="font-bold text-zinc-300 px-2 py-1 bg-zinc-800 rounded-lg">Round {currentRound}</span>
-                <span className={`font-black uppercase px-4 py-1.5 rounded-full border ${activeTurnId === myId ? 'active-turn-indicator text-white bg-red-900' : 'border-zinc-700 text-amber-400 bg-zinc-800'}`}>
-                  {activePlayerObj.name}'s Turn
+              {/* Top HUD */}
+              <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-2xl p-2.5 shadow-md z-20 shrink-0">
+                <span className="px-3 py-1 bg-red-950 border border-red-800 text-red-400 text-xs font-black rounded-lg">R{currentRound}</span>
+                <span className={`text-xs font-black uppercase px-4 py-1.5 rounded-full border ${activePlayer?.id === myId ? 'active-turn-glow text-white bg-red-900' : 'border-zinc-700 text-amber-400 bg-zinc-800'}`}>
+                  {activePlayer?.name}'s Turn
                 </span>
-                <span className="font-bold text-red-400 px-2 py-1 bg-red-950 border border-red-900 rounded-lg">
-                  Role: {myPlayer.role || 'SPECTATOR'}
+                <span className={`px-2 py-1 rounded-lg text-[10px] font-black border flex items-center gap-1.5 ${myPlayer.role === 'KILLER' ? 'bg-red-950 text-red-400 border-red-800' : 'bg-blue-950 text-blue-400 border-blue-800'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${myPlayer.role === 'KILLER' ? 'bg-red-500' : 'bg-blue-500'}`}></span>
+                  {myPlayer.role}
                 </span>
               </div>
 
-              <div className="flex-1 bg-zinc-900/60 border border-zinc-800 rounded-3xl p-6 flex flex-col items-center justify-center relative shadow-inner min-h-[220px]">
-                <div className="absolute top-4 left-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest bg-zinc-950 px-2 py-1 rounded-md border border-zinc-800">
-                  Center Pile ({centerPile.length}/{players.filter(p => p.isAlive).length})
-                </div>
-                <div className="flex flex-wrap gap-3 justify-center">
-                  {centerPile.length === 0 ? (
-                    <span className="text-zinc-600 italic text-sm">Awaiting card submissions...</span>
-                  ) : (
-                    centerPile.map((c, i) => (
-                      <div key={i} className="w-20 h-28 bg-zinc-800 border-2 border-zinc-700 rounded-xl p-2 flex flex-col justify-between text-[10px] shadow-lg">
-                        <span className="font-black text-red-500 tracking-wider">FACE-DOWN</span>
-                        <span className="text-zinc-400 text-center truncate">{c.playedBy}</span>
+              {botThinkingStatus && <div className="mt-2 text-center text-xs font-bold text-red-400 animate-pulse">🤖 {botThinkingStatus}</div>}
+              <div className="w-full max-w-sm mx-auto mt-2 bg-zinc-900/60 border border-zinc-800 rounded-xl p-2 max-h-[70px] overflow-y-auto text-[10px] font-mono text-zinc-300 shrink-0">
+                {turnLogs.map((l, i) => <div key={i} className="truncate">{l}</div>)}
+              </div>
+
+              {/* Opponent Row (2D Flow) */}
+              <div className="flex justify-center flex-wrap gap-2 mt-4 z-10 shrink-0 px-2">
+                {otherPlayers.map(p => (
+                  <div key={p.id} className={`flex flex-col items-center p-2 w-24 rounded-xl border-2 transition-all ${!p.isAlive ? 'bg-zinc-950/60 border-zinc-900 opacity-50' : p.id === activePlayer?.id ? 'bg-zinc-900 border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.3)] scale-105' : 'bg-zinc-900/70 border-zinc-700'}`}>
+                    <div className="text-[10px] font-black truncate w-full text-center text-zinc-100">{p.name}</div>
+                    {p.isAlive ? (
+                      <div className="flex gap-1 mt-1 text-[9px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-300 shadow-inner">
+                        <span>✋ {p.hand?.length || 0}</span> <span>🂠 {p.deck?.length || 0}</span>
                       </div>
-                    ))
-                  )}
+                    ) : <div className="text-[9px] font-black text-red-500 mt-1">DEAD ({p.role[0]})</div>}
+                    <div className="text-[9px] font-bold text-amber-400 mt-1.5 border-t border-zinc-800/80 w-full text-center pt-1">
+                      {(completedTasks[p.id] || []).length}/4 Tasks
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* 2D Center Pile */}
+              <div className="flex-1 flex items-center justify-center relative z-10 my-4 min-h-[120px]">
+                <div onClick={() => { if(centerPile.length > 0) dispatchAction('TRIGGER_REVEAL', {}); }} className="w-24 h-36 bg-gradient-to-br from-zinc-800 to-zinc-900 border-[3px] border-red-600 rounded-2xl shadow-xl flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform">
+                  <span className="text-4xl font-black text-red-500 drop-shadow-md">{centerPile.length}</span>
+                  <span className="text-[10px] font-black text-zinc-500 uppercase mt-1">Center Pile</span>
+                  {centerPileBlocked && <div className="absolute -bottom-4 bg-red-950 text-red-400 text-[9px] font-black px-2 py-0.5 rounded-full border border-red-800">🚫 BLOCKED</div>}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="md:col-span-2 bg-zinc-900 border border-zinc-800 rounded-2xl p-3 h-32 overflow-y-auto text-xs font-mono text-zinc-400 space-y-1 shadow-inner">
-                  {logs.map((l, i) => <div key={i} className={i === 0 ? 'text-zinc-100 font-bold' : ''}>&gt; {l}</div>)}
-                </div>
-                
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-3 flex flex-col justify-center space-y-2">
-                  <button 
-                    disabled={activeTurnId !== myId || !selectedCard}
-                    onClick={() => requestPlayCard('CENTER')} 
-                    className="w-full py-2.5 bg-red-600 hover:bg-red-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition shadow"
-                  >
-                    Place in Center
-                  </button>
-                  <button 
-                    disabled={activeTurnId !== myId || !selectedCard}
-                    onClick={() => requestPlayCard('PASS')} 
-                    className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-200 font-bold rounded-xl text-xs border border-zinc-700 transition"
-                  >
-                    Pass to Next Player
-                  </button>
-                </div>
-              </div>
+              {/* Action Hand Controls */}
+              <div className="mt-auto w-full z-20 flex flex-col gap-2 shrink-0">
+                {activePlayer?.id === myId && selectedCard && !activePlayer?.isBot && (
+                  <div className="bg-zinc-900/95 border border-zinc-700 rounded-2xl p-3 shadow-[0_-10px_40px_rgba(0,0,0,0.6)] w-full max-w-sm mx-auto animate-fade-in-up">
+                    <div className="text-center text-[11px] font-bold text-amber-400 mb-2 truncate">Selected: <span className="text-white">{selectedCard.name}</span></div>
+                    {['NOBEE', 'ANTIK', 'GIFT', 'CLUE'].includes(selectedCard.type) ? (
+                      <button onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'FACE_UP' })} className="w-full py-3 bg-red-600 text-white font-black text-xs rounded-xl shadow-lg active:scale-95 transition-all">📢 PLAY FACE-UP EFFECT</button>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-2">
+                        <button disabled={centerPileBlocked} onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'CENTER' })} className="py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold text-xs rounded-xl shadow disabled:opacity-50 disabled:cursor-not-allowed">🂠 To Center</button>
+                        <button onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'NEXT_DECK' })} className="py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold text-xs rounded-xl shadow">🤝 Pass Next</button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-              <div className="p-4 rounded-3xl border bg-zinc-900/80 border-zinc-800 flex flex-col space-y-3 shadow-xl">
-                <div className="flex justify-between items-center px-1">
-                  <span className="font-black text-zinc-200 text-sm tracking-wide">YOUR HAND ({myPlayer.name})</span>
-                  <span className="text-zinc-400 text-xs font-bold bg-zinc-800 px-3 py-1 rounded-full">Tasks: {myPlayer.tasks}/4</span>
-                </div>
-                <div className="flex gap-3 overflow-x-auto pb-2 pt-1 px-1">
-                  {(myPlayer.hand || []).length === 0 ? (
-                    <div className="text-zinc-500 italic text-sm py-4">Hand empty. Waiting for round to end...</div>
-                  ) : (
-                    myPlayer.hand.map((card) => (
-                      <div 
-                        key={card.id} 
-                        onClick={() => setSelectedCard(card)}
-                        className={`w-32 h-44 bg-zinc-900 border-2 rounded-2xl p-3 flex flex-col justify-between cursor-pointer card-3d flex-shrink-0 ${selectedCard?.id === card.id ? 'border-red-500 ring-2 ring-red-500/50 -translate-y-2 shadow-[0_10px_20px_rgba(220,38,38,0.2)]' : 'border-zinc-700 hover:border-zinc-500'}`}
-                      >
-                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full self-start border ${card.type === 'TASK' ? 'text-emerald-400 bg-emerald-950 border-emerald-800' : card.type === 'KILL' ? 'text-red-400 bg-red-950 border-red-800' : 'text-blue-400 bg-blue-950 border-blue-800'}`}>
-                          {card.type}
-                        </span>
-                        <div className="mt-auto">
-                          <h4 className="font-black text-xs text-white leading-tight mb-1">{card.name}</h4>
-                          <p className="text-[10px] text-zinc-400 leading-tight">{card.desc}</p>
+                <div className={`bg-zinc-900/80 border border-zinc-800 rounded-3xl p-3 shadow-xl transition-all ${myPlayer.isAlive ? '' : 'opacity-40 grayscale'}`}>
+                  <div className="flex justify-between items-center px-2 mb-2">
+                    <span className="font-black text-sm text-zinc-200">YOUR HAND</span>
+                    <span className="text-xs font-bold text-zinc-400">Tasks: {(completedTasks[myId] || []).length}/4</span>
+                  </div>
+                  <div className="flex gap-3 overflow-x-auto pb-2 px-1">
+                    {(!myPlayer.isAlive || (myPlayer.hand || []).length === 0) ? (
+                      <div className="text-zinc-500 italic text-xs py-6 w-full text-center">Empty hand or eliminated.</div>
+                    ) : (
+                      myPlayer.hand.map(card => (
+                        <div key={card.id} onClick={() => { if(activePlayer?.id === myId) setSelectedCard(card); playAudioFx('card'); }} className={`w-32 flex-shrink-0 transition-transform cursor-pointer ${selectedCard?.id === card.id ? '-translate-y-2' : ''}`}>
+                          <VisualCard card={card} isSelected={selectedCard?.id === card.id} />
                         </div>
-                      </div>
-                    ))
-                  )}
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
-
             </div>
           )}
+
+          {/* ALL DYNAMIC MODALS VIA RPC (Syncs to modalOwnerId) */}
+          {activeModal === 'NOBEE_CHOICE' && modalOwnerId === myId && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-purple-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">🔍</div><h3 className="text-xl font-black text-purple-400 mb-4">Assistant's Nobee</h3>
+                <button onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: null, mode: 'CENTER_PILE' })} className="w-full py-3 px-4 mb-4 bg-zinc-800 hover:bg-purple-950/60 border border-zinc-700 rounded-xl text-xs font-black text-purple-300 flex justify-between">
+                  <span>1. Visually Inspect Center Pile</span> <span className="text-zinc-400">({centerPile.length} cards)</span>
+                </button>
+                <div className="text-[10px] font-bold text-zinc-500 uppercase mb-2">OR Inspect Player's Hand:</div>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {players.filter(p => p.id !== myId && p.isAlive).map(p => (
+                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: p.id, mode: 'HAND' })} className="w-full py-2.5 px-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-xs font-bold text-white flex justify-between">
+                      <span>Inspect {p.name}</span> <span className="text-purple-400 text-[10px]">{p.hand.length} Cards</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'VISUAL_CARD_PEEK' && modalOwnerId === myId && modalData && (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-purple-600/80 w-full max-w-md rounded-3xl p-5 flex flex-col max-h-[85vh]">
+                <div className="text-center mb-4"><div className="text-3xl mb-1">👁️</div><h3 className="text-lg font-black text-purple-400">{modalData.title}</h3></div>
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 mb-4 p-1">
+                  {modalData.cards.map((c, i) => <VisualCard key={c.id || i} card={c} extraBadge={modalData.isCenter ? `From ${getPlayerName(c.playedBy)}` : null} />)}
+                </div>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-red-600 text-white font-black text-xs rounded-2xl shadow-xl active:scale-95">DONE INSPECTING ⚡</button>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'SHOW_ME_TARGET' && modalOwnerId === myId && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-cyan-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">📢</div><h3 className="text-xl font-black text-cyan-400 mb-4">Show Me What You Got!</h3>
+                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+                  {players.filter(p => p.id !== myId && p.isAlive && p.hand.length > 0).map(p => (
+                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_SHOW_ME', { targetPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-cyan-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white flex justify-between">
+                      <span>{p.name}</span> <span className="text-cyan-400 font-bold">{p.hand.length} Cards</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'NEEDING_TARGET' && modalOwnerId === myId && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">🪝</div><h3 className="text-xl font-black text-amber-400 mb-4">I'll Be Needing That!</h3>
+                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+                  {players.filter(p => p.id !== myId && p.isAlive && (p.hand.length > 0 || Number(giftCardHolder) === p.id)).map(p => (
+                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NEEDING', { targetPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white flex justify-between">
+                      <span>{p.name}</span> <span className="text-amber-400 font-bold">{Number(giftCardHolder) === p.id ? '🎁 Holds Gift Card!' : `${p.hand.length} Cards`}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'STEAL_CARD_MODAL' && modalOwnerId === myId && modalData && (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-amber-500/80 w-full max-w-md rounded-3xl p-5 flex flex-col max-h-[85vh]">
+                <div className="text-center mb-3"><div className="text-3xl mb-1">🪝</div><h3 className="text-lg font-black text-amber-400">Steal from {modalData.target.name}</h3></div>
+                {Number(giftCardHolder) === modalData.target.id && (
+                  <button onClick={() => dispatchAction('STEAL_GIFT', { targetPId: modalData.target.id })} className="w-full py-3 mb-3 bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-black text-xs rounded-xl flex justify-center gap-2"><span>🎁</span> STEAL THE GIFT CARD DIRECTLY!</button>
+                )}
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 mb-4 p-1">
+                  {modalData.target.hand.map((c, i) => <VisualCard key={c.id || i} card={c} onClick={() => dispatchAction('STEAL_SPECIFIC', { card: c, targetPId: modalData.target.id })} />)}
+                </div>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-3 bg-zinc-800 text-zinc-400 font-bold text-xs rounded-xl">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'CCTV_MODAL' && modalOwnerId === myId && modalData && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-red-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">📹</div><h3 className="text-xl font-black text-red-500 mb-4">CCTV Scan Results</h3>
+                {modalData.armedPlayers.length > 0 ? (
+                  <div className="space-y-2 mb-4">
+                    {modalData.armedPlayers.map(p => (
+                      <div key={p.id} className="p-3 bg-red-950/60 border border-red-800 rounded-xl flex justify-between items-center text-xs font-bold text-white">
+                        <span>{p.name}</span><span className="text-red-400 text-[10px] font-black uppercase px-2 py-0.5 bg-red-900/80 rounded-full">HOLDING KILL CARD 🗡️</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <div className="p-4 bg-zinc-800/80 border border-zinc-700 rounded-xl text-xs font-bold text-emerald-400 mb-4">✅ Safe! No other players are currently holding Kill cards.</div>}
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-3.5 bg-red-600 text-white font-black text-xs rounded-xl shadow-lg">CONTINUE GAME ⚡</button>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'SABOTAGE_TARGET' && modalOwnerId === myId && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">💥</div><h3 className="text-xl font-black text-amber-500 mb-4">Sabotage Target</h3>
+                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+                  {players.filter(p => p.id !== myId && (completedTasks[p.id] || []).length >= 1).map(p => (
+                    <button key={p.id} onClick={() => dispatchAction('SABOTAGE_TARGET', { targetPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white flex justify-between">
+                      <span>{p.name}</span><span className="text-amber-400">{(completedTasks[p.id] || []).length} Completed</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'SABOTAGE_REDISTRIBUTE' && modalOwnerId === myId && modalData && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">🎁</div><h3 className="text-xl font-black text-amber-500 mb-4">Redistribute Tasks</h3>
+                <div className="space-y-2 mb-4">
+                  {players.filter(p => p.id !== modalData.targetPId && p.isAlive).map(p => (
+                    <button key={p.id} onClick={() => dispatchAction('SABOTAGE_REDISTRIBUTE', { recipientPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white text-left">
+                      Give {modalData.removed.length} Task(s) to {p.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'ANTIK' && modalOwnerId === myId && (
+            <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-zinc-900 border border-red-600/60 w-full max-w-md rounded-3xl p-5 text-center">
+                <div className="text-3xl mb-2">🕵️</div><h3 className="text-xl font-black text-red-500 mb-4">Detective's Verdict</h3>
+                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+                  {players.filter(p => p.id !== myId && p.isAlive).map(p => (
+                    <button key={p.id} onClick={() => dispatchAction('ANTIK_ACCUSE', { accuserId: myId, targetId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-red-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white text-left">
+                      Accuse {p.name}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="text-xs text-zinc-500 font-bold">Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {activeModal === 'REVEAL_ANIM' && (modalOwnerId === 'ALL') && modalData && (
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
+              <h2 className="text-xs font-bold text-red-500 uppercase tracking-widest mb-2">Round Reveal Phase</h2>
+              <h1 className="text-2xl font-black text-white mb-6">Center Pile Unveiled</h1>
+              {modalData.pile.length > 0 ? (
+                <div className="w-full max-w-xs space-y-2 mb-8 max-h-60 overflow-y-auto">
+                  {modalData.pile.map((c, i) => (
+                    <div key={i} className="p-3 bg-zinc-900 border border-red-600/50 rounded-xl flex justify-between items-center text-left card-flip-anim">
+                      <div><div className="text-[10px] font-bold text-red-400 uppercase">{c.type}</div><div className="text-xs font-black text-white">{c.name}</div></div>
+                      <div className="text-lg">{c.type === 'KILL' ? '🗡️' : c.type === 'SHIELD' ? '🛡️' : c.type === 'TASK' ? '✅' : '🃏'}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : <div className="text-sm text-zinc-400 italic mb-8">No cards were played into the Center Pile this round!</div>}
+              {(networkMode === 'HOST' || networkMode === 'SOLO') && (
+                <button onClick={() => dispatchAction('FINALIZE_ROUND', { pile: modalData.pile })} className="w-full max-w-xs py-4 bg-red-600 text-white font-black text-sm rounded-xl shadow-xl active:scale-95 transition-all">RESOLVE ROUND EFFECTS ⚡</button>
+              )}
+              {networkMode === 'JOIN' && <div className="text-amber-400 font-bold animate-pulse text-sm">Host is resolving round mechanics...</div>}
+            </div>
+          )}
+
+          {gameState === 'GAME_OVER' && (
+            <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col justify-between p-6 max-w-md mx-auto text-center">
+              <div className="my-auto">
+                <div className="text-5xl mb-4">{gameWinner === 'SAFE' ? '🛡️' : '🗡️'}</div>
+                <h1 className={`text-4xl font-black mb-4 ${gameWinner === 'SAFE' ? 'text-emerald-400' : 'text-red-500'}`}>{gameWinner === 'SAFE' ? 'SAFE TEAM WINS!' : 'KILLER TEAM WINS!'}</h1>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 my-6 text-left space-y-2">
+                  <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Final Player Roles</div>
+                  {players.map(p => (
+                    <div key={p.id} className="flex justify-between items-center text-xs py-1 border-b border-zinc-800/60 last:border-0">
+                      <span className="font-bold text-white">{p.name}</span><span className={`font-black ${p.role === 'KILLER' ? 'text-red-500' : 'text-emerald-400'}`}>{p.role}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => setGameState('MENU')} className="w-full py-4 bg-red-600 text-white font-black text-base rounded-2xl shadow-xl active:scale-95 transition-all">PLAY AGAIN 🔄</button>
+            </div>
+          )}
+
         </div>
       );
     }
 
-    ReactDOM.render(<App />, document.getElementById('root'));
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
   </script>
 </body>
 </html>
