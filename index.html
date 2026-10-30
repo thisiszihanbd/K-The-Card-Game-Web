@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>K? The Card Game - Pro 3.2 Responsive</title>
+  <title>K? The Card Game - Pro 3.3 Responsive</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -147,7 +147,7 @@
         for (let t = 1; t <= 4; t++) mainDeck.push({ id: `task_${p.id}_${t}_${Math.random()}`, type: 'TASK', targetPlayer: p.id, taskNum: t, name: `${p.name} Task ${t}`, desc: `Counts toward ${p.name}'s required tasks.` });
         for (let k = 1; k <= 2; k++) mainDeck.push({ id: `kill_${p.id}_${k}_${Math.random()}`, type: 'KILL', targetPlayer: p.id, name: `${p.name} Kill Card`, desc: `Attacks ${p.name} unless blocked.` });
         mainDeck.push({ id: `shield_${p.id}_${Math.random()}`, type: 'SHIELD', name: 'Shield Card', desc: 'Blocks 1 Kill Card attack.' });
-        mainDeck.push({ id: `nobee_${p.id}_${Math.random()}`, type: 'NOBEE', name: "Assistant's Nobee", desc: "Visually inspect target's full hand or inspect the Center Pile." });
+        mainDeck.push({ id: `nobee_${p.id}_${Math.random()}`, type: 'NOBEE', name: "Assistant's Nobee", desc: "Visually inspect target's full hand or target's deck." });
       });
 
       let antikCount = playerCount <= 5 ? 1 : (playerCount <= 8 ? 2 : 3);
@@ -476,10 +476,11 @@
       const handleNobeePlay = (pId, card, currentPlayers) => {
         const actor = currentPlayers.find(p => p.id === pId);
         if (actor.isBot) {
-          if (Math.random() > 0.5 && centerPile.length > 0) addLog(`🔍 ${actor.name} scanned the Center Pile.`);
-          else {
-            const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive);
-            addLog(`🔍 ${actor.name} scanned ${targets[Math.floor(Math.random() * targets.length)].name}'s hand.`);
+          const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive);
+          if (targets.length > 0) {
+            const target = targets[Math.floor(Math.random() * targets.length)];
+            const scanDeck = Math.random() > 0.5;
+            addLog(`🔍 ${actor.name} scanned ${target.name}'s ${scanDeck ? 'deck' : 'hand'}.`);
           }
           advanceTurnQueue(currentPlayers);
         } else {
@@ -488,13 +489,13 @@
       };
 
       const resolveNobeeAction = (targetPId, mode) => {
-        if (mode === 'CENTER_PILE') {
-          playAudioFx('card'); addLog(`🔍 NOBEE: Inspected ${centerPile.length} cards in Center Pile.`);
-          setActiveModalFor('VISUAL_CARD_PEEK', activePlayer.id, { title: `Center Pile Inspection`, cards: centerPile, isCenter: true });
-        } else if (mode === 'HAND') {
-          const target = players.find(p => p.id === targetPId);
+        const target = players.find(p => p.id === targetPId);
+        if (mode === 'HAND') {
           playAudioFx('card'); addLog(`🔍 NOBEE: Inspected ${target.name}'s hand.`);
           setActiveModalFor('VISUAL_CARD_PEEK', activePlayer.id, { title: `${target.name}'s Hand Cards`, cards: target.hand, isCenter: false });
+        } else if (mode === 'DECK') {
+          playAudioFx('card'); addLog(`🔍 NOBEE: Inspected ${target.name}'s deck.`);
+          setActiveModalFor('VISUAL_CARD_PEEK', activePlayer.id, { title: `${target.name}'s Deck Cards`, cards: target.deck, isCenter: false });
         }
       };
 
@@ -842,17 +843,31 @@
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-zinc-900 border border-purple-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
                 <div className="text-4xl mb-3">🔍</div><h3 className="text-2xl font-black text-purple-400 mb-6">Assistant's Nobee</h3>
-                <button onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: null, mode: 'CENTER_PILE' })} className="w-full py-4 px-5 mb-6 bg-zinc-800 hover:bg-purple-950/60 border border-zinc-700 rounded-xl text-sm font-black text-purple-300 flex justify-between items-center transition-all">
-                  <span>1. Visually Inspect Center Pile</span> <span className="text-zinc-400 text-xs bg-zinc-950 px-2 py-1 rounded">({centerPile.length} cards)</span>
-                </button>
-                <div className="text-xs font-bold text-zinc-500 uppercase mb-3 tracking-wider">OR Inspect Player's Hand:</div>
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                  {players.filter(p => p.id !== myId && p.isAlive).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: p.id, mode: 'HAND' })} className="w-full py-3.5 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold text-white flex justify-between items-center transition-all">
-                      <span>Inspect {p.name}</span> <span className="text-purple-400 text-xs bg-zinc-950 px-2 py-1 rounded">{p.hand.length} Cards</span>
-                    </button>
-                  ))}
+                
+                <div className="space-y-4 max-h-80 overflow-y-auto pr-1 text-left">
+                  <div>
+                    <div className="text-xs font-bold text-zinc-500 uppercase mb-3 tracking-wider text-center">Inspect Player Hands:</div>
+                    <div className="space-y-2">
+                      {players.filter(p => p.id !== myId && p.isAlive).map(p => (
+                        <button key={`hand_${p.id}`} onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: p.id, mode: 'HAND' })} className="w-full py-3.5 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold text-white flex justify-between items-center transition-all">
+                          <span>{p.name}'s Hand</span> <span className="text-purple-400 text-xs bg-zinc-950 px-2 py-1 rounded">{p.hand.length} Cards</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="border-t border-zinc-800 pt-4">
+                    <div className="text-xs font-bold text-zinc-500 uppercase mb-3 tracking-wider text-center">Inspect Player Decks:</div>
+                    <div className="space-y-2">
+                      {players.filter(p => p.id !== myId && p.isAlive).map(p => (
+                        <button key={`deck_${p.id}`} onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: p.id, mode: 'DECK' })} className="w-full py-3.5 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold text-white flex justify-between items-center transition-all">
+                          <span>{p.name}'s Deck</span> <span className="text-purple-400 text-xs bg-zinc-950 px-2 py-1 rounded">{p.deck.length} Cards</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full mt-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold text-sm rounded-xl transition-colors">Cancel Scan</button>
               </div>
             </div>
           )}
