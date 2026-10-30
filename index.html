@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>K? The Card Game - Pro 3.1 Multiplayer</title>
+  <title>K? The Card Game - Pro 3.2 Responsive</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -61,8 +61,8 @@
     .animate-fade-in-up { animation: fadeInUp 0.3s ease-out forwards; }
   </style>
 </head>
-<body class="h-full w-full overflow-x-hidden font-sans antialiased select-none">
-  <div id="root" class="h-full w-full"></div>
+<body class="h-full w-full overflow-x-hidden font-sans antialiased select-none flex justify-center">
+  <div id="root" class="h-full w-full max-w-[1600px]"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
@@ -186,16 +186,16 @@
       };
       const style = getTypeStyle(card.type);
       return (
-        <div onClick={onClick} className={`p-3 rounded-2xl border flex flex-col justify-between h-36 relative transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isSelected ? 'bg-red-950/80 border-red-500 ring-2 ring-red-500 scale-[1.02] shadow-lg shadow-red-900/40' : `bg-zinc-900/90 ${style.border}`}`}>
+        <div onClick={onClick} className={`p-3 rounded-2xl border flex flex-col justify-between h-36 md:h-44 relative transition-all ${onClick ? 'cursor-pointer hover:scale-105 active:scale-95' : ''} ${isSelected ? 'bg-red-950/80 border-red-500 ring-2 ring-red-500 scale-[1.02] md:scale-110 shadow-lg shadow-red-900/40 -translate-y-2 md:-translate-y-4' : `bg-zinc-900/90 ${style.border}`}`}>
           <div className="flex justify-between items-start">
-            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${style.badge}`}>{card.type}</span>
-            <span className="text-base">{style.icon}</span>
+            <span className={`text-[9px] md:text-xs font-black uppercase px-2 py-0.5 rounded-full border ${style.badge}`}>{card.type}</span>
+            <span className="text-base md:text-xl">{style.icon}</span>
           </div>
           <div className="my-1">
-            <div className="text-[11px] font-black text-white leading-tight line-clamp-2">{card.name}</div>
+            <div className="text-[11px] md:text-sm font-black text-white leading-tight line-clamp-2">{card.name}</div>
           </div>
-          <div className="text-[9px] text-zinc-400 leading-tight line-clamp-2">{card.desc}</div>
-          {extraBadge && <div className="absolute -top-2 -right-2 bg-amber-500 text-black text-[9px] font-black px-2 py-0.5 rounded-full shadow">{extraBadge}</div>}
+          <div className="text-[9px] md:text-xs text-zinc-400 leading-tight line-clamp-2">{card.desc}</div>
+          {extraBadge && <div className="absolute -top-2 -right-2 bg-amber-500 text-black text-[9px] md:text-xs font-black px-2 py-0.5 rounded-full shadow">{extraBadge}</div>}
         </div>
       );
     }
@@ -688,36 +688,35 @@
         try { confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); } catch (e) {}
       };
 
-      // Ensure active opponents are derived correctly without self
       const otherPlayers = players.filter(p => p.id !== myId);
 
       return (
-        <div className="h-full w-full flex flex-col justify-between max-w-lg mx-auto bg-zinc-950 border-x border-zinc-800 shadow-2xl relative overflow-hidden">
+        <div className="h-full w-full flex flex-col justify-between bg-zinc-950 shadow-2xl relative overflow-hidden xl:border-x border-zinc-800">
           
           {/* MENU SCREEN */}
           {gameState === 'MENU' && (
-            <div className="flex-1 p-6 flex flex-col justify-center text-center overflow-y-auto">
-              <div className="inline-block p-4 rounded-3xl bg-red-950/60 border border-red-700/80 mb-2 mx-auto w-max">
-                <span className="text-5xl font-black text-red-500 tracking-tighter">K?</span>
+            <div className="flex-1 p-6 flex flex-col justify-center items-center text-center overflow-y-auto">
+              <div className="inline-block p-4 rounded-3xl bg-red-950/60 border border-red-700/80 mb-2 w-max">
+                <span className="text-5xl md:text-7xl font-black text-red-500 tracking-tighter">K?</span>
               </div>
-              <h1 className="text-2xl font-black text-white tracking-tight mb-6">THE CARD GAME</h1>
+              <h1 className="text-2xl md:text-4xl font-black text-white tracking-tight mb-8">THE CARD GAME</h1>
 
-              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-left space-y-5">
+              <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 md:p-8 text-left space-y-5 shadow-xl">
                 <div>
-                  <label className="text-xs font-bold text-zinc-400 uppercase block mb-2">Total Participants: <span className="text-red-500 text-sm">{playerCount}</span></label>
+                  <label className="text-xs md:text-sm font-bold text-zinc-400 uppercase block mb-2">Total Participants: <span className="text-red-500">{playerCount}</span></label>
                   <input type="range" min="4" max="10" value={playerCount} onChange={e => setPlayerCount(Number(e.target.value))} className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg cursor-pointer" />
                 </div>
                 <div className="border-t border-zinc-800 pt-5 space-y-3">
-                  <button onClick={() => startGame('SOLO')} className="w-full py-3.5 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm rounded-xl shadow-lg active:scale-95 transition-all">
+                  <button onClick={() => startGame('SOLO')} className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm md:text-base rounded-xl shadow-lg active:scale-95 transition-all">
                     PLAY SOLO VS BOTS
                   </button>
-                  <button onClick={hostRoom} className="w-full py-3.5 bg-red-600 hover:bg-red-500 text-white font-black text-sm rounded-xl shadow-lg active:scale-95 transition-all">
+                  <button onClick={hostRoom} className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black text-sm md:text-base rounded-xl shadow-lg active:scale-95 transition-all">
                     HOST ONLINE ROOM
                   </button>
                 </div>
                 <div className="flex space-x-2 pt-2 border-t border-zinc-800">
-                  <input type="text" placeholder="K1234" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-sm text-white uppercase text-center font-mono tracking-widest" />
-                  <button onClick={joinRoom} className="px-5 py-3 bg-zinc-800 hover:bg-zinc-700 font-bold rounded-xl text-white border border-zinc-700 text-sm">JOIN</button>
+                  <input type="text" placeholder="K1234" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-sm md:text-base text-white uppercase text-center font-mono tracking-widest" />
+                  <button onClick={joinRoom} className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 font-bold rounded-xl text-white border border-zinc-700 text-sm md:text-base">JOIN</button>
                 </div>
               </div>
             </div>
@@ -725,102 +724,109 @@
 
           {/* LOBBY SCREEN */}
           {gameState === 'LOBBY' && (
-            <div className="flex-1 p-6 flex flex-col justify-center text-center">
-              <h2 className="text-2xl font-black text-white mb-6">Online P2P Lobby</h2>
-              <div className="text-5xl font-mono font-black text-red-500 bg-zinc-900 border border-zinc-800 px-8 py-4 rounded-2xl tracking-widest mx-auto shadow-inner mb-4">
+            <div className="flex-1 p-6 flex flex-col justify-center items-center text-center">
+              <h2 className="text-2xl md:text-4xl font-black text-white mb-6">Online P2P Lobby</h2>
+              <div className="text-5xl md:text-7xl font-mono font-black text-red-500 bg-zinc-900 border border-zinc-800 px-8 py-4 rounded-2xl tracking-widest shadow-inner mb-4">
                 {roomCode}
               </div>
-              <p className="text-zinc-400 text-xs mb-6 px-4">Empty slots will adaptively fill as explicit Bot players when the Host starts.</p>
-              <div className="bg-zinc-900/80 border border-zinc-800 p-4 rounded-2xl w-full text-left space-y-2 mb-8">
-                <div className="text-xs font-bold text-zinc-500 mb-2">CONNECTED ROSTER:</div>
+              <p className="text-zinc-400 text-xs md:text-sm mb-8 max-w-md">Empty slots will adaptively fill as explicit Bot players when the Host starts.</p>
+              
+              <div className="bg-zinc-900/80 border border-zinc-800 p-6 rounded-2xl w-full max-w-md text-left space-y-3 mb-8 shadow-xl">
+                <div className="text-xs md:text-sm font-bold text-zinc-500 mb-2 tracking-wider">CONNECTED ROSTER:</div>
                 {players.map(p => (
-                  <div key={p.id} className="text-white font-semibold flex items-center gap-2 text-sm">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> {p.name} {p.id === myId && '(You)'}
+                  <div key={p.id} className="text-white font-semibold flex items-center gap-3 text-sm md:text-base">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> {p.name} {p.id === myId && <span className="text-zinc-500 text-xs">(You)</span>}
                   </div>
                 ))}
               </div>
-              {networkMode === 'HOST' ? (
-                <button onClick={() => startGame('HOST')} className="w-full py-4 bg-red-600 text-white font-black rounded-2xl shadow-xl active:scale-95 transition-all">LAUNCH MATCH</button>
-              ) : (
-                <p className="text-amber-400 text-sm font-bold animate-pulse">Waiting for host to launch...</p>
-              )}
+              
+              <div className="w-full max-w-md">
+                {networkMode === 'HOST' ? (
+                  <button onClick={() => startGame('HOST')} className="w-full py-4 md:py-5 bg-red-600 text-white font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all">LAUNCH MATCH</button>
+                ) : (
+                  <p className="text-amber-400 text-sm md:text-base font-bold animate-pulse">Waiting for host to launch...</p>
+                )}
+              </div>
             </div>
           )}
 
           {/* 2D RESPONSIVE GAMEPLAY UI */}
           {(gameState === 'PLAYING' || gameState === 'RESOLVING') && (
-            <div className="flex-1 flex flex-col relative w-full h-full bg-zinc-950 p-3 pt-6">
+            <div className="flex-1 flex flex-col relative w-full h-full bg-zinc-950 p-3 md:p-6 lg:p-8 pt-6 md:pt-8">
               
               {/* Top HUD */}
-              <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-2xl p-2.5 shadow-md z-20 shrink-0">
-                <span className="px-3 py-1 bg-red-950 border border-red-800 text-red-400 text-xs font-black rounded-lg">R{currentRound}</span>
-                <span className={`text-xs font-black uppercase px-4 py-1.5 rounded-full border ${activePlayer?.id === myId ? 'active-turn-glow text-white bg-red-900' : 'border-zinc-700 text-amber-400 bg-zinc-800'}`}>
+              <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-2xl p-3 md:p-4 shadow-md z-20 shrink-0 max-w-5xl mx-auto w-full">
+                <span className="px-4 py-1.5 bg-red-950 border border-red-800 text-red-400 text-xs md:text-sm font-black rounded-lg">Round {currentRound}</span>
+                <span className={`text-xs md:text-sm font-black uppercase px-6 py-2 rounded-full border ${activePlayer?.id === myId ? 'active-turn-glow text-white bg-red-900' : 'border-zinc-700 text-amber-400 bg-zinc-800'}`}>
                   {activePlayer?.name}'s Turn
                 </span>
-                <span className={`px-2 py-1 rounded-lg text-[10px] font-black border flex items-center gap-1.5 ${myPlayer.role === 'KILLER' ? 'bg-red-950 text-red-400 border-red-800' : 'bg-blue-950 text-blue-400 border-blue-800'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${myPlayer.role === 'KILLER' ? 'bg-red-500' : 'bg-blue-500'}`}></span>
+                <span className={`px-4 py-1.5 rounded-lg text-[10px] md:text-xs font-black border flex items-center gap-2 ${myPlayer.role === 'KILLER' ? 'bg-red-950 text-red-400 border-red-800' : 'bg-blue-950 text-blue-400 border-blue-800'}`}>
+                  <span className={`w-2 h-2 rounded-full ${myPlayer.role === 'KILLER' ? 'bg-red-500' : 'bg-blue-500'}`}></span>
                   {myPlayer.role}
                 </span>
               </div>
 
-              {botThinkingStatus && <div className="mt-2 text-center text-xs font-bold text-red-400 animate-pulse">🤖 {botThinkingStatus}</div>}
-              <div className="w-full max-w-sm mx-auto mt-2 bg-zinc-900/60 border border-zinc-800 rounded-xl p-2 max-h-[70px] overflow-y-auto text-[10px] font-mono text-zinc-300 shrink-0">
-                {turnLogs.map((l, i) => <div key={i} className="truncate">{l}</div>)}
+              {botThinkingStatus && <div className="mt-3 text-center text-xs md:text-sm font-bold text-red-400 animate-pulse">🤖 {botThinkingStatus}</div>}
+              
+              <div className="w-full max-w-2xl mx-auto mt-4 bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 max-h-[80px] overflow-y-auto text-[10px] md:text-xs font-mono text-zinc-300 shrink-0">
+                {turnLogs.map((l, i) => <div key={i} className="truncate py-0.5">{l}</div>)}
               </div>
 
-              {/* Opponent Row (2D Flow) */}
-              <div className="flex justify-center flex-wrap gap-2 mt-4 z-10 shrink-0 px-2">
+              {/* Opponent Row (Responsive Flex Layout) */}
+              <div className="flex justify-center flex-wrap gap-2 md:gap-6 mt-6 md:mt-8 z-10 shrink-0 px-2 max-w-6xl mx-auto w-full">
                 {otherPlayers.map(p => (
-                  <div key={p.id} className={`flex flex-col items-center p-2 w-24 rounded-xl border-2 transition-all ${!p.isAlive ? 'bg-zinc-950/60 border-zinc-900 opacity-50' : p.id === activePlayer?.id ? 'bg-zinc-900 border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.3)] scale-105' : 'bg-zinc-900/70 border-zinc-700'}`}>
-                    <div className="text-[10px] font-black truncate w-full text-center text-zinc-100">{p.name}</div>
+                  <div key={p.id} className={`flex flex-col items-center p-2 md:p-3 w-24 md:w-32 rounded-xl border-2 transition-all ${!p.isAlive ? 'bg-zinc-950/60 border-zinc-900 opacity-50' : p.id === activePlayer?.id ? 'bg-zinc-900 border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.4)] scale-105' : 'bg-zinc-900/70 border-zinc-700'}`}>
+                    <div className="text-[10px] md:text-sm font-black truncate w-full text-center text-zinc-100">{p.name}</div>
                     {p.isAlive ? (
-                      <div className="flex gap-1 mt-1 text-[9px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-300 shadow-inner">
+                      <div className="flex gap-2 mt-2 text-[9px] md:text-xs bg-zinc-800 px-2 py-1 rounded text-zinc-300 shadow-inner w-full justify-center">
                         <span>✋ {p.hand?.length || 0}</span> <span>🂠 {p.deck?.length || 0}</span>
                       </div>
-                    ) : <div className="text-[9px] font-black text-red-500 mt-1">DEAD ({p.role[0]})</div>}
-                    <div className="text-[9px] font-bold text-amber-400 mt-1.5 border-t border-zinc-800/80 w-full text-center pt-1">
+                    ) : <div className="text-[9px] md:text-xs font-black text-red-500 mt-2">DEAD ({p.role[0]})</div>}
+                    <div className="text-[9px] md:text-xs font-bold text-amber-400 mt-2 border-t border-zinc-800/80 w-full text-center pt-2">
                       {(completedTasks[p.id] || []).length}/4 Tasks
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* 2D Center Pile */}
-              <div className="flex-1 flex items-center justify-center relative z-10 my-4 min-h-[120px]">
-                <div onClick={() => { if(centerPile.length > 0) dispatchAction('TRIGGER_REVEAL', {}); }} className="w-24 h-36 bg-gradient-to-br from-zinc-800 to-zinc-900 border-[3px] border-red-600 rounded-2xl shadow-xl flex flex-col items-center justify-center cursor-pointer hover:scale-105 transition-transform">
-                  <span className="text-4xl font-black text-red-500 drop-shadow-md">{centerPile.length}</span>
-                  <span className="text-[10px] font-black text-zinc-500 uppercase mt-1">Center Pile</span>
-                  {centerPileBlocked && <div className="absolute -bottom-4 bg-red-950 text-red-400 text-[9px] font-black px-2 py-0.5 rounded-full border border-red-800">🚫 BLOCKED</div>}
+              {/* Responsive Center Pile */}
+              <div className="flex-1 flex items-center justify-center relative z-10 my-6 md:my-10 min-h-[140px]">
+                <div onClick={() => { if(centerPile.length > 0) dispatchAction('TRIGGER_REVEAL', {}); }} className="w-28 h-40 md:w-36 md:h-52 bg-gradient-to-br from-zinc-800 to-zinc-900 border-[3px] border-red-600 rounded-2xl shadow-xl flex flex-col items-center justify-center cursor-pointer hover:scale-105 md:hover:scale-110 transition-transform">
+                  <span className="text-5xl md:text-6xl font-black text-red-500 drop-shadow-md">{centerPile.length}</span>
+                  <span className="text-[10px] md:text-sm font-black text-zinc-500 uppercase mt-2">Center Pile</span>
+                  {centerPileBlocked && <div className="absolute -bottom-5 bg-red-950 text-red-400 text-[9px] md:text-xs font-black px-3 py-1 rounded-full border border-red-800 shadow-lg">🚫 BLOCKED</div>}
                 </div>
               </div>
 
-              {/* Action Hand Controls */}
-              <div className="mt-auto w-full z-20 flex flex-col gap-2 shrink-0">
+              {/* Action Controls & Player Hand */}
+              <div className="mt-auto w-full z-20 flex flex-col gap-4 shrink-0 max-w-6xl mx-auto">
                 {activePlayer?.id === myId && selectedCard && !activePlayer?.isBot && (
-                  <div className="bg-zinc-900/95 border border-zinc-700 rounded-2xl p-3 shadow-[0_-10px_40px_rgba(0,0,0,0.6)] w-full max-w-sm mx-auto animate-fade-in-up">
-                    <div className="text-center text-[11px] font-bold text-amber-400 mb-2 truncate">Selected: <span className="text-white">{selectedCard.name}</span></div>
+                  <div className="bg-zinc-900/95 border border-zinc-700 rounded-2xl p-4 shadow-[0_-10px_40px_rgba(0,0,0,0.6)] w-full max-w-md mx-auto animate-fade-in-up">
+                    <div className="text-center text-xs md:text-sm font-bold text-amber-400 mb-3 truncate">Selected: <span className="text-white">{selectedCard.name}</span></div>
                     {['NOBEE', 'ANTIK', 'GIFT', 'CLUE'].includes(selectedCard.type) ? (
-                      <button onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'FACE_UP' })} className="w-full py-3 bg-red-600 text-white font-black text-xs rounded-xl shadow-lg active:scale-95 transition-all">📢 PLAY FACE-UP EFFECT</button>
+                      <button onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'FACE_UP' })} className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black text-sm rounded-xl shadow-lg active:scale-95 transition-all">📢 PLAY FACE-UP EFFECT</button>
                     ) : (
-                      <div className="grid grid-cols-2 gap-2">
-                        <button disabled={centerPileBlocked} onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'CENTER' })} className="py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold text-xs rounded-xl shadow disabled:opacity-50 disabled:cursor-not-allowed">🂠 To Center</button>
-                        <button onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'NEXT_DECK' })} className="py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-white font-bold text-xs rounded-xl shadow">🤝 Pass Next</button>
+                      <div className="grid grid-cols-2 gap-3">
+                        <button disabled={centerPileBlocked} onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'CENTER' })} className="py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-white font-bold text-sm rounded-xl shadow disabled:opacity-50 disabled:cursor-not-allowed transition-all">🂠 To Center</button>
+                        <button onClick={() => dispatchAction('PLAY_CARD', { pId: myId, card: selectedCard, dest: 'NEXT_DECK' })} className="py-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-white font-bold text-sm rounded-xl shadow transition-all">🤝 Pass Next</button>
                       </div>
                     )}
                   </div>
                 )}
 
-                <div className={`bg-zinc-900/80 border border-zinc-800 rounded-3xl p-3 shadow-xl transition-all ${myPlayer.isAlive ? '' : 'opacity-40 grayscale'}`}>
-                  <div className="flex justify-between items-center px-2 mb-2">
-                    <span className="font-black text-sm text-zinc-200">YOUR HAND</span>
-                    <span className="text-xs font-bold text-zinc-400">Tasks: {(completedTasks[myId] || []).length}/4</span>
+                <div className={`bg-zinc-900/80 border border-zinc-800 rounded-3xl p-4 md:p-6 shadow-xl transition-all ${myPlayer.isAlive ? '' : 'opacity-40 grayscale'}`}>
+                  <div className="flex justify-between items-center px-2 mb-4 max-w-3xl mx-auto w-full">
+                    <span className="font-black text-sm md:text-base text-zinc-200">YOUR HAND</span>
+                    <span className="text-xs md:text-sm font-bold text-zinc-400 bg-zinc-950 px-3 py-1 rounded-lg border border-zinc-800">Tasks: {(completedTasks[myId] || []).length}/4</span>
                   </div>
-                  <div className="flex gap-3 overflow-x-auto pb-2 px-1">
+                  
+                  {/* Flex center on desktop to keep cards grouped beautifully */}
+                  <div className="flex gap-3 md:gap-5 overflow-x-auto pb-4 px-2 md:justify-center w-full">
                     {(!myPlayer.isAlive || (myPlayer.hand || []).length === 0) ? (
-                      <div className="text-zinc-500 italic text-xs py-6 w-full text-center">Empty hand or eliminated.</div>
+                      <div className="text-zinc-500 italic text-sm md:text-base py-8 w-full text-center">Empty hand or eliminated.</div>
                     ) : (
                       myPlayer.hand.map(card => (
-                        <div key={card.id} onClick={() => { if(activePlayer?.id === myId) setSelectedCard(card); playAudioFx('card'); }} className={`w-32 flex-shrink-0 transition-transform cursor-pointer ${selectedCard?.id === card.id ? '-translate-y-2' : ''}`}>
+                        <div key={card.id} onClick={() => { if(activePlayer?.id === myId) setSelectedCard(card); playAudioFx('card'); }} className={`w-32 md:w-40 flex-shrink-0 transition-transform ${selectedCard?.id === card.id ? 'md:-translate-y-4' : ''}`}>
                           <VisualCard card={card} isSelected={selectedCard?.id === card.id} />
                         </div>
                       ))
@@ -831,19 +837,19 @@
             </div>
           )}
 
-          {/* ALL DYNAMIC MODALS VIA RPC (Syncs to modalOwnerId) */}
+          {/* DYNAMIC MODALS (Centered & Scaled for PC/Mobile) */}
           {activeModal === 'NOBEE_CHOICE' && modalOwnerId === myId && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-purple-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">🔍</div><h3 className="text-xl font-black text-purple-400 mb-4">Assistant's Nobee</h3>
-                <button onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: null, mode: 'CENTER_PILE' })} className="w-full py-3 px-4 mb-4 bg-zinc-800 hover:bg-purple-950/60 border border-zinc-700 rounded-xl text-xs font-black text-purple-300 flex justify-between">
-                  <span>1. Visually Inspect Center Pile</span> <span className="text-zinc-400">({centerPile.length} cards)</span>
+              <div className="bg-zinc-900 border border-purple-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">🔍</div><h3 className="text-2xl font-black text-purple-400 mb-6">Assistant's Nobee</h3>
+                <button onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: null, mode: 'CENTER_PILE' })} className="w-full py-4 px-5 mb-6 bg-zinc-800 hover:bg-purple-950/60 border border-zinc-700 rounded-xl text-sm font-black text-purple-300 flex justify-between items-center transition-all">
+                  <span>1. Visually Inspect Center Pile</span> <span className="text-zinc-400 text-xs bg-zinc-950 px-2 py-1 rounded">({centerPile.length} cards)</span>
                 </button>
-                <div className="text-[10px] font-bold text-zinc-500 uppercase mb-2">OR Inspect Player's Hand:</div>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div className="text-xs font-bold text-zinc-500 uppercase mb-3 tracking-wider">OR Inspect Player's Hand:</div>
+                <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                   {players.filter(p => p.id !== myId && p.isAlive).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: p.id, mode: 'HAND' })} className="w-full py-2.5 px-3 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-xs font-bold text-white flex justify-between">
-                      <span>Inspect {p.name}</span> <span className="text-purple-400 text-[10px]">{p.hand.length} Cards</span>
+                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NOBEE', { targetPId: p.id, mode: 'HAND' })} className="w-full py-3.5 px-4 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-xl text-sm font-bold text-white flex justify-between items-center transition-all">
+                      <span>Inspect {p.name}</span> <span className="text-purple-400 text-xs bg-zinc-950 px-2 py-1 rounded">{p.hand.length} Cards</span>
                     </button>
                   ))}
                 </div>
@@ -852,25 +858,25 @@
           )}
 
           {activeModal === 'VISUAL_CARD_PEEK' && modalOwnerId === myId && modalData && (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-purple-600/80 w-full max-w-md rounded-3xl p-5 flex flex-col max-h-[85vh]">
-                <div className="text-center mb-4"><div className="text-3xl mb-1">👁️</div><h3 className="text-lg font-black text-purple-400">{modalData.title}</h3></div>
-                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 mb-4 p-1">
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 md:p-8">
+              <div className="bg-zinc-900 border border-purple-600/80 w-full max-w-2xl rounded-3xl p-6 md:p-8 flex flex-col max-h-[90vh] shadow-2xl">
+                <div className="text-center mb-6"><div className="text-4xl mb-2">👁️</div><h3 className="text-xl md:text-2xl font-black text-purple-400">{modalData.title}</h3></div>
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5 mb-6 p-2">
                   {modalData.cards.map((c, i) => <VisualCard key={c.id || i} card={c} extraBadge={modalData.isCenter ? `From ${getPlayerName(c.playedBy)}` : null} />)}
                 </div>
-                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-3.5 bg-gradient-to-r from-purple-600 to-red-600 text-white font-black text-xs rounded-2xl shadow-xl active:scale-95">DONE INSPECTING ⚡</button>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-4 bg-gradient-to-r from-purple-600 to-red-600 text-white font-black text-sm md:text-base rounded-2xl shadow-xl active:scale-95 transition-transform">DONE INSPECTING ⚡</button>
               </div>
             </div>
           )}
 
           {activeModal === 'SHOW_ME_TARGET' && modalOwnerId === myId && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-cyan-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">📢</div><h3 className="text-xl font-black text-cyan-400 mb-4">Show Me What You Got!</h3>
-                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+              <div className="bg-zinc-900 border border-cyan-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">📢</div><h3 className="text-2xl font-black text-cyan-400 mb-6">Show Me What You Got!</h3>
+                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1">
                   {players.filter(p => p.id !== myId && p.isAlive && p.hand.length > 0).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_SHOW_ME', { targetPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-cyan-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white flex justify-between">
-                      <span>{p.name}</span> <span className="text-cyan-400 font-bold">{p.hand.length} Cards</span>
+                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_SHOW_ME', { targetPId: p.id })} className="w-full py-4 px-5 bg-zinc-800 hover:bg-cyan-950/60 border border-zinc-700 rounded-xl text-sm font-black text-white flex justify-between items-center transition-all">
+                      <span>{p.name}</span> <span className="text-cyan-400 font-bold bg-cyan-950 px-2 py-1 rounded text-xs">{p.hand.length} Cards</span>
                     </button>
                   ))}
                 </div>
@@ -880,12 +886,12 @@
 
           {activeModal === 'NEEDING_TARGET' && modalOwnerId === myId && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">🪝</div><h3 className="text-xl font-black text-amber-400 mb-4">I'll Be Needing That!</h3>
-                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">🪝</div><h3 className="text-2xl font-black text-amber-400 mb-6">I'll Be Needing That!</h3>
+                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1">
                   {players.filter(p => p.id !== myId && p.isAlive && (p.hand.length > 0 || Number(giftCardHolder) === p.id)).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NEEDING', { targetPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white flex justify-between">
-                      <span>{p.name}</span> <span className="text-amber-400 font-bold">{Number(giftCardHolder) === p.id ? '🎁 Holds Gift Card!' : `${p.hand.length} Cards`}</span>
+                    <button key={p.id} onClick={() => dispatchAction('RESOLVE_NEEDING', { targetPId: p.id })} className="w-full py-4 px-5 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-sm font-black text-white flex justify-between items-center transition-all">
+                      <span>{p.name}</span> <span className="text-amber-400 font-bold bg-amber-950/50 px-2 py-1 rounded text-xs">{Number(giftCardHolder) === p.id ? '🎁 Holds Gift Card!' : `${p.hand.length} Cards`}</span>
                     </button>
                   ))}
                 </div>
@@ -894,46 +900,46 @@
           )}
 
           {activeModal === 'STEAL_CARD_MODAL' && modalOwnerId === myId && modalData && (
-            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-amber-500/80 w-full max-w-md rounded-3xl p-5 flex flex-col max-h-[85vh]">
-                <div className="text-center mb-3"><div className="text-3xl mb-1">🪝</div><h3 className="text-lg font-black text-amber-400">Steal from {modalData.target.name}</h3></div>
+            <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 md:p-8">
+              <div className="bg-zinc-900 border border-amber-500/80 w-full max-w-2xl rounded-3xl p-6 md:p-8 flex flex-col max-h-[90vh] shadow-2xl">
+                <div className="text-center mb-6"><div className="text-4xl mb-2">🪝</div><h3 className="text-xl md:text-2xl font-black text-amber-400">Steal from {modalData.target.name}</h3></div>
                 {Number(giftCardHolder) === modalData.target.id && (
-                  <button onClick={() => dispatchAction('STEAL_GIFT', { targetPId: modalData.target.id })} className="w-full py-3 mb-3 bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-black text-xs rounded-xl flex justify-center gap-2"><span>🎁</span> STEAL THE GIFT CARD DIRECTLY!</button>
+                  <button onClick={() => dispatchAction('STEAL_GIFT', { targetPId: modalData.target.id })} className="w-full py-4 mb-6 bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-black text-sm md:text-base rounded-xl flex justify-center gap-3 transition-transform active:scale-95 shadow-lg"><span>🎁</span> STEAL THE GIFT CARD DIRECTLY!</button>
                 )}
-                <div className="flex-1 overflow-y-auto grid grid-cols-2 gap-2 mb-4 p-1">
+                <div className="flex-1 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-5 mb-6 p-2">
                   {modalData.target.hand.map((c, i) => <VisualCard key={c.id || i} card={c} onClick={() => dispatchAction('STEAL_SPECIFIC', { card: c, targetPId: modalData.target.id })} />)}
                 </div>
-                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-3 bg-zinc-800 text-zinc-400 font-bold text-xs rounded-xl">Cancel</button>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-400 font-bold text-sm rounded-xl transition-colors">Cancel</button>
               </div>
             </div>
           )}
 
           {activeModal === 'CCTV_MODAL' && modalOwnerId === myId && modalData && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-red-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">📹</div><h3 className="text-xl font-black text-red-500 mb-4">CCTV Scan Results</h3>
+              <div className="bg-zinc-900 border border-red-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">📹</div><h3 className="text-2xl font-black text-red-500 mb-6">CCTV Scan Results</h3>
                 {modalData.armedPlayers.length > 0 ? (
-                  <div className="space-y-2 mb-4">
+                  <div className="space-y-3 mb-6">
                     {modalData.armedPlayers.map(p => (
-                      <div key={p.id} className="p-3 bg-red-950/60 border border-red-800 rounded-xl flex justify-between items-center text-xs font-bold text-white">
-                        <span>{p.name}</span><span className="text-red-400 text-[10px] font-black uppercase px-2 py-0.5 bg-red-900/80 rounded-full">HOLDING KILL CARD 🗡️</span>
+                      <div key={p.id} className="p-4 bg-red-950/60 border border-red-800 rounded-xl flex justify-between items-center text-sm font-bold text-white">
+                        <span>{p.name}</span><span className="text-red-400 text-[10px] md:text-xs font-black uppercase px-3 py-1 bg-red-900/80 rounded-full">HOLDING KILL CARD 🗡️</span>
                       </div>
                     ))}
                   </div>
-                ) : <div className="p-4 bg-zinc-800/80 border border-zinc-700 rounded-xl text-xs font-bold text-emerald-400 mb-4">✅ Safe! No other players are currently holding Kill cards.</div>}
-                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-3.5 bg-red-600 text-white font-black text-xs rounded-xl shadow-lg">CONTINUE GAME ⚡</button>
+                ) : <div className="p-5 bg-zinc-800/80 border border-zinc-700 rounded-xl text-sm font-bold text-emerald-400 mb-6">✅ Safe! No other players are currently holding Kill cards.</div>}
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black text-sm rounded-xl shadow-lg transition-transform active:scale-95">CONTINUE GAME ⚡</button>
               </div>
             </div>
           )}
 
           {activeModal === 'SABOTAGE_TARGET' && modalOwnerId === myId && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">💥</div><h3 className="text-xl font-black text-amber-500 mb-4">Sabotage Target</h3>
-                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">💥</div><h3 className="text-2xl font-black text-amber-500 mb-6">Sabotage Target</h3>
+                <div className="space-y-3 mb-4 max-h-64 overflow-y-auto pr-1">
                   {players.filter(p => p.id !== myId && (completedTasks[p.id] || []).length >= 1).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('SABOTAGE_TARGET', { targetPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white flex justify-between">
-                      <span>{p.name}</span><span className="text-amber-400">{(completedTasks[p.id] || []).length} Completed</span>
+                    <button key={p.id} onClick={() => dispatchAction('SABOTAGE_TARGET', { targetPId: p.id })} className="w-full py-4 px-5 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-sm font-black text-white flex justify-between items-center transition-all">
+                      <span>{p.name}</span><span className="text-amber-400 bg-amber-950/50 px-2 py-1 rounded text-xs">{(completedTasks[p.id] || []).length} Completed</span>
                     </button>
                   ))}
                 </div>
@@ -943,11 +949,11 @@
 
           {activeModal === 'SABOTAGE_REDISTRIBUTE' && modalOwnerId === myId && modalData && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">🎁</div><h3 className="text-xl font-black text-amber-500 mb-4">Redistribute Tasks</h3>
-                <div className="space-y-2 mb-4">
+              <div className="bg-zinc-900 border border-amber-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">🎁</div><h3 className="text-2xl font-black text-amber-500 mb-6">Redistribute Tasks</h3>
+                <div className="space-y-3 mb-4">
                   {players.filter(p => p.id !== modalData.targetPId && p.isAlive).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('SABOTAGE_REDISTRIBUTE', { recipientPId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white text-left">
+                    <button key={p.id} onClick={() => dispatchAction('SABOTAGE_REDISTRIBUTE', { recipientPId: p.id })} className="w-full py-4 px-5 bg-zinc-800 hover:bg-amber-950/60 border border-zinc-700 rounded-xl text-sm font-black text-white text-left transition-all">
                       Give {modalData.removed.length} Task(s) to {p.name}
                     </button>
                   ))}
@@ -958,56 +964,56 @@
 
           {activeModal === 'ANTIK' && modalOwnerId === myId && (
             <div className="fixed inset-0 bg-black/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-zinc-900 border border-red-600/60 w-full max-w-md rounded-3xl p-5 text-center">
-                <div className="text-3xl mb-2">🕵️</div><h3 className="text-xl font-black text-red-500 mb-4">Detective's Verdict</h3>
-                <div className="space-y-2 mb-4 max-h-52 overflow-y-auto">
+              <div className="bg-zinc-900 border border-red-600/60 w-full max-w-lg rounded-3xl p-6 md:p-8 text-center shadow-2xl">
+                <div className="text-4xl mb-3">🕵️</div><h3 className="text-2xl font-black text-red-500 mb-6">Detective's Verdict</h3>
+                <div className="space-y-3 mb-6 max-h-64 overflow-y-auto pr-1">
                   {players.filter(p => p.id !== myId && p.isAlive).map(p => (
-                    <button key={p.id} onClick={() => dispatchAction('ANTIK_ACCUSE', { accuserId: myId, targetId: p.id })} className="w-full py-3 px-4 bg-zinc-800 hover:bg-red-950/60 border border-zinc-700 rounded-xl text-xs font-black text-white text-left">
+                    <button key={p.id} onClick={() => dispatchAction('ANTIK_ACCUSE', { accuserId: myId, targetId: p.id })} className="w-full py-4 px-5 bg-zinc-800 hover:bg-red-950/60 border border-zinc-700 rounded-xl text-sm font-black text-white text-left transition-all">
                       Accuse {p.name}
                     </button>
                   ))}
                 </div>
-                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="text-xs text-zinc-500 font-bold">Cancel</button>
+                <button onClick={() => dispatchAction('CLOSE_MODAL', {})} className="text-sm text-zinc-500 font-bold hover:text-zinc-300">Cancel Action</button>
               </div>
             </div>
           )}
 
           {activeModal === 'REVEAL_ANIM' && (modalOwnerId === 'ALL') && modalData && (
             <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
-              <h2 className="text-xs font-bold text-red-500 uppercase tracking-widest mb-2">Round Reveal Phase</h2>
-              <h1 className="text-2xl font-black text-white mb-6">Center Pile Unveiled</h1>
+              <h2 className="text-sm font-bold text-red-500 uppercase tracking-widest mb-3">Round Reveal Phase</h2>
+              <h1 className="text-3xl md:text-5xl font-black text-white mb-8">Center Pile Unveiled</h1>
               {modalData.pile.length > 0 ? (
-                <div className="w-full max-w-xs space-y-2 mb-8 max-h-60 overflow-y-auto">
+                <div className="w-full max-w-md space-y-3 mb-10 max-h-80 overflow-y-auto pr-2">
                   {modalData.pile.map((c, i) => (
-                    <div key={i} className="p-3 bg-zinc-900 border border-red-600/50 rounded-xl flex justify-between items-center text-left card-flip-anim">
-                      <div><div className="text-[10px] font-bold text-red-400 uppercase">{c.type}</div><div className="text-xs font-black text-white">{c.name}</div></div>
-                      <div className="text-lg">{c.type === 'KILL' ? '🗡️' : c.type === 'SHIELD' ? '🛡️' : c.type === 'TASK' ? '✅' : '🃏'}</div>
+                    <div key={i} className="p-4 md:p-5 bg-zinc-900 border border-red-600/50 rounded-xl flex justify-between items-center text-left card-flip-anim shadow-lg">
+                      <div><div className="text-xs font-bold text-red-400 uppercase tracking-wider mb-1">{c.type}</div><div className="text-sm md:text-base font-black text-white">{c.name}</div></div>
+                      <div className="text-2xl md:text-3xl">{c.type === 'KILL' ? '🗡️' : c.type === 'SHIELD' ? '🛡️' : c.type === 'TASK' ? '✅' : '🃏'}</div>
                     </div>
                   ))}
                 </div>
-              ) : <div className="text-sm text-zinc-400 italic mb-8">No cards were played into the Center Pile this round!</div>}
+              ) : <div className="text-base text-zinc-400 italic mb-10">No cards were played into the Center Pile this round!</div>}
               {(networkMode === 'HOST' || networkMode === 'SOLO') && (
-                <button onClick={() => dispatchAction('FINALIZE_ROUND', { pile: modalData.pile })} className="w-full max-w-xs py-4 bg-red-600 text-white font-black text-sm rounded-xl shadow-xl active:scale-95 transition-all">RESOLVE ROUND EFFECTS ⚡</button>
+                <button onClick={() => dispatchAction('FINALIZE_ROUND', { pile: modalData.pile })} className="w-full max-w-md py-5 bg-red-600 hover:bg-red-500 text-white font-black text-base rounded-2xl shadow-xl active:scale-95 transition-all">RESOLVE ROUND EFFECTS ⚡</button>
               )}
-              {networkMode === 'JOIN' && <div className="text-amber-400 font-bold animate-pulse text-sm">Host is resolving round mechanics...</div>}
+              {networkMode === 'JOIN' && <div className="text-amber-400 font-bold animate-pulse text-base">Host is resolving round mechanics...</div>}
             </div>
           )}
 
           {gameState === 'GAME_OVER' && (
-            <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col justify-between p-6 max-w-md mx-auto text-center">
-              <div className="my-auto">
-                <div className="text-5xl mb-4">{gameWinner === 'SAFE' ? '🛡️' : '🗡️'}</div>
-                <h1 className={`text-4xl font-black mb-4 ${gameWinner === 'SAFE' ? 'text-emerald-400' : 'text-red-500'}`}>{gameWinner === 'SAFE' ? 'SAFE TEAM WINS!' : 'KILLER TEAM WINS!'}</h1>
-                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 my-6 text-left space-y-2">
-                  <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">Final Player Roles</div>
+            <div className="fixed inset-0 bg-zinc-950 z-50 flex flex-col justify-between p-8 max-w-2xl mx-auto text-center shadow-2xl xl:border-x border-zinc-800">
+              <div className="my-auto w-full">
+                <div className="text-7xl mb-6">{gameWinner === 'SAFE' ? '🛡️' : '🗡️'}</div>
+                <h1 className={`text-5xl md:text-6xl font-black mb-8 ${gameWinner === 'SAFE' ? 'text-emerald-400' : 'text-red-500'}`}>{gameWinner === 'SAFE' ? 'SAFE TEAM WINS!' : 'KILLER TEAM WINS!'}</h1>
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 md:p-8 my-8 text-left space-y-3 shadow-xl">
+                  <div className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4 text-center">Final Player Roles</div>
                   {players.map(p => (
-                    <div key={p.id} className="flex justify-between items-center text-xs py-1 border-b border-zinc-800/60 last:border-0">
-                      <span className="font-bold text-white">{p.name}</span><span className={`font-black ${p.role === 'KILLER' ? 'text-red-500' : 'text-emerald-400'}`}>{p.role}</span>
+                    <div key={p.id} className="flex justify-between items-center text-sm md:text-base py-2 border-b border-zinc-800/60 last:border-0">
+                      <span className="font-bold text-white">{p.name}</span><span className={`font-black px-3 py-1 rounded bg-zinc-950 ${p.role === 'KILLER' ? 'text-red-500' : 'text-emerald-400'}`}>{p.role}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <button onClick={() => setGameState('MENU')} className="w-full py-4 bg-red-600 text-white font-black text-base rounded-2xl shadow-xl active:scale-95 transition-all">PLAY AGAIN 🔄</button>
+              <button onClick={() => setGameState('MENU')} className="w-full py-5 bg-red-600 hover:bg-red-500 text-white font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all">PLAY AGAIN 🔄</button>
             </div>
           )}
 
