@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>K? The Card Game - Pro 4.0 Layout & Netcode</title>
+  <title>K? The Card Game - Pro 5.0 Unified Lobby</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -201,12 +201,12 @@
     }
 
     function App() {
-      const [networkMode, setNetworkMode] = useState('SOLO');
+      const [networkMode, setNetworkMode] = useState('SOLO'); // 'SOLO', 'HOST', 'JOIN'
       const [roomCode, setRoomCode] = useState('');
       const [joinCode, setJoinCode] = useState('');
       const [myId, setMyId] = useState(1);
       
-      const [gameState, setGameState] = useState('MENU');
+      const [gameState, setGameState] = useState('MENU'); // 'MENU', 'PLAYING', 'GAME_OVER'
       const [playerCount, setPlayerCount] = useState(4);
       const [players, setPlayers] = useState([]);
       const [roundStartingIndex, setRoundStartingIndex] = useState(0);
@@ -245,13 +245,13 @@
           const stateToSync = {
             gameState, players, roundStartingIndex, turnQueue, queueIndex, currentRound,
             centerPile, centerPileBlocked, completedTasks, giftCardHolder, gameWinner,
-            turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus
+            turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus, playerCount
           };
           if (networkMode === 'HOST') {
             connsRef.current.forEach(c => c.send({ type: 'SYNC', state: stateToSync }));
           }
         }
-      }, [gameState, players, roundStartingIndex, turnQueue, queueIndex, currentRound, centerPile, centerPileBlocked, completedTasks, giftCardHolder, gameWinner, turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus, networkMode]);
+      }, [gameState, players, roundStartingIndex, turnQueue, queueIndex, currentRound, centerPile, centerPileBlocked, completedTasks, giftCardHolder, gameWinner, turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus, playerCount, networkMode]);
 
       const dispatchAction = (actionType, payload) => {
         if (networkMode === 'JOIN') {
@@ -282,32 +282,24 @@
       // --- NETWORKING LOBBY METHODS ---
       const hostRoom = () => {
         const code = 'K' + Math.floor(1000 + Math.random() * 9000);
-        setRoomCode(code);
         const peer = new Peer(code);
         peerRef.current = peer;
 
         peer.on('open', () => {
           setNetworkMode('HOST');
-          setGameState('LOBBY');
+          setRoomCode(code);
           setPlayers([{ id: 1, name: 'Player 1', isBot: false }]);
           setMyId(1);
         });
 
         peer.on('connection', (conn) => {
           connsRef.current.push(conn);
-          
           setPlayers(prev => {
             const newId = prev.length + 1;
             const newRoster = [...prev, { id: newId, name: `Player ${newId}`, isBot: false }];
-            
-            // Explicit WELCOME sync on open channel eliminates race conditions
-            conn.on('open', () => {
-              conn.send({ type: 'WELCOME', assignedId: newId, roster: newRoster });
-            });
-            
+            conn.on('open', () => { conn.send({ type: 'WELCOME', assignedId: newId, roster: newRoster }); });
             return newRoster;
           });
-
           conn.on('data', data => { if (data.type === 'ACTION') processAction(data.actionType, data.payload); });
         });
       };
@@ -322,7 +314,7 @@
           const conn = peer.connect(code);
           connsRef.current = [conn];
 
-          conn.on('open', () => { setNetworkMode('JOIN'); setGameState('LOBBY'); setRoomCode(code); });
+          conn.on('open', () => { setNetworkMode('JOIN'); setRoomCode(code); });
 
           conn.on('data', data => {
             if (data.type === 'WELCOME') {
@@ -345,6 +337,7 @@
               setModalData(data.state.modalData);
               setModalOwnerId(data.state.modalOwnerId);
               setBotThinkingStatus(data.state.botThinkingStatus);
+              if (data.state.playerCount) setPlayerCount(data.state.playerCount);
             }
           });
         });
@@ -460,16 +453,16 @@
           addLog(`🤝 ${getPlayerName(playerId)} passed a card to ${targetPlayer.name}'s Deck.`);
         } else if (destination === 'FACE_UP') {
           addLog(`📢 ${getPlayerName(playerId)} dropped ${card.name} FACE-UP!`);
-          if (card.type === 'NOBEE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleNobeePlay(playerId, card, updatedPlayers); return; }
-          else if (card.type === 'ANTIK') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleAntikPlay(playerId, card, updatedPlayers); return; }
-          else if (card.type === 'GIFT') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleGiftPlay(playerId, card, updatedPlayers); return; }
-          else if (card.type === 'CLUE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleCluePlay(playerId, card, updatedPlayers); return; }
+          if (card.type === 'NOBEE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleNobeePlay(playerId, card, updatedPlayers, updatedPile); return; }
+          else if (card.type === 'ANTIK') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleAntikPlay(playerId, card, updatedPlayers, updatedPile); return; }
+          else if (card.type === 'GIFT') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleGiftPlay(playerId, card, updatedPlayers, updatedPile); return; }
+          else if (card.type === 'CLUE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleCluePlay(playerId, card, updatedPlayers, updatedPile); return; }
         }
 
         setPlayers(updatedPlayers);
         setCenterPile(updatedPile);
         setSelectedCard(null);
-        advanceTurnQueue(updatedPlayers);
+        advanceTurnQueue(updatedPlayers, updatedPile);
       };
 
       const getPlayerName = (pId) => {
@@ -477,17 +470,18 @@
         return found ? found.name : `Player ${pId}`;
       };
 
-      const advanceTurnQueue = (latestPlayers = players) => {
+      // PASSING LATEST PILE PREVENTS THE MULTIPLAYER RACE CONDITION
+      const advanceTurnQueue = (latestPlayers = players, latestPile = centerPile) => {
         const nextQIdx = queueIndex + 1;
         if (nextQIdx >= turnQueue.length) {
-          setTimeout(() => setActiveModalFor('REVEAL_ANIM', 'ALL', { pile: centerPile, currentPlayers: latestPlayers }), 600);
+          setTimeout(() => setActiveModalFor('REVEAL_ANIM', 'ALL', { pile: latestPile, currentPlayers: latestPlayers }), 600);
         } else {
           setQueueIndex(nextQIdx);
         }
       };
 
       // --- SPECIAL CARD RESOLUTIONS ---
-      const handleNobeePlay = (pId, card, currentPlayers) => {
+      const handleNobeePlay = (pId, card, currentPlayers, updatedPile) => {
         const actor = currentPlayers.find(p => p.id === pId);
         if (actor.isBot) {
           const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive);
@@ -496,7 +490,7 @@
             const scanDeck = Math.random() > 0.5;
             addLog(`🔍 ${actor.name} scanned ${target.name}'s ${scanDeck ? 'deck' : 'hand'}.`);
           }
-          advanceTurnQueue(currentPlayers);
+          advanceTurnQueue(currentPlayers, updatedPile);
         } else {
           setActiveModalFor('NOBEE_CHOICE', pId);
         }
@@ -513,18 +507,54 @@
         }
       };
 
-      const handleCluePlay = (pId, card, currentPlayers) => {
+      const handleCluePlay = (pId, card, currentPlayers, updatedPile) => {
         const clueKey = card.clueKey;
         const actor = currentPlayers.find(p => p.id === pId);
 
         if (clueKey === 'SHOW_ME') {
-          if (actor.isBot) { addLog(`📢 "Show Me": ${actor.name} forced an inspection.`); advanceTurnQueue(currentPlayers); }
+          if (actor.isBot) { 
+            const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive && p.hand.length > 0);
+            if(targets.length > 0) addLog(`📢 "Show Me": ${actor.name} inspected ${targets[Math.floor(Math.random()*targets.length)].name}'s hand.`);
+            advanceTurnQueue(currentPlayers, updatedPile); 
+          }
           else setActiveModalFor('SHOW_ME_TARGET', pId);
         } else if (clueKey === 'NEEDING') {
-          if (actor.isBot) { addLog(`🪝 "I'll Be Needing That": ${actor.name} stole a card.`); advanceTurnQueue(currentPlayers); }
+          if (actor.isBot) { 
+            const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive && p.hand.length > 0);
+            if(targets.length > 0) {
+                 const target = targets[Math.floor(Math.random() * targets.length)];
+                 const stolen = target.hand[Math.floor(Math.random() * target.hand.length)];
+                 const updated = currentPlayers.map(p => {
+                    if (p.id === target.id) return { ...p, hand: p.hand.filter(c => c.id !== stolen.id) };
+                    if (p.id === pId) return { ...p, hand: [...p.hand, stolen] };
+                    return p;
+                 });
+                 setPlayers(updated);
+                 addLog(`🪝 ${actor.name} stole a card from ${target.name}!`);
+                 advanceTurnQueue(updated, updatedPile);
+            } else { advanceTurnQueue(currentPlayers, updatedPile); }
+          }
           else setActiveModalFor('NEEDING_TARGET', pId);
         } else if (clueKey === 'SABOTAGE') {
-          if (actor.isBot) { addLog(`💥 Sabotage triggered by ${actor.name}.`); advanceTurnQueue(currentPlayers); }
+          if (actor.isBot) { 
+            const targets = currentPlayers.filter(p => p.id !== pId && (completedTasks[p.id] || []).length >= 1);
+            if (targets.length > 0) {
+                 const target = targets[Math.floor(Math.random() * targets.length)];
+                 const removed = completedTasks[target.id].slice(0, 1);
+                 const remaining = completedTasks[target.id].slice(1);
+                 const newTasksMap = { ...completedTasks, [target.id]: remaining, [pId]: [...(completedTasks[pId] || []), ...removed] };
+                 
+                 let updated = [...currentPlayers];
+                 if (remaining.length < 4 && Number(giftCardHolder) === target.id) {
+                    setGiftCardHolder(null); addLog(`💥 Sabotage broke the task streak! GIFT CARD REVOKED!`);
+                    updated = updated.map(p => p.id === target.id ? { ...p, hand: p.hand.filter(c => c.type !== 'GIFT') } : p);
+                 }
+                 setPlayers(updated);
+                 setCompletedTasks(newTasksMap);
+                 addLog(`💥 ${actor.name} sabotaged 1 task from ${target.name}!`);
+                 advanceTurnQueue(updated, updatedPile);
+             } else { advanceTurnQueue(currentPlayers, updatedPile); }
+          }
           else setActiveModalFor('SABOTAGE_TARGET', pId);
         } else if (clueKey === 'CCTV') {
           playAudioFx('shield');
@@ -532,14 +562,14 @@
           setActiveModalFor('CCTV_MODAL', pId, { armedPlayers });
           addLog(armedPlayers.length > 0 ? `📹 CCTV: Kill cards detected on ${armedPlayers.map(p=>p.name).join(', ')}!` : `📹 CCTV: No active Kill cards found!`);
         } else if (clueKey === 'EYES_ON_YOU') {
-          setCenterPileBlocked(true); addLog(`👁️ "Eyes On You": Center Pile blocked!`); advanceTurnQueue(currentPlayers);
+          setCenterPileBlocked(true); addLog(`👁️ "Eyes On You": Center Pile blocked!`); advanceTurnQueue(currentPlayers, updatedPile);
         } else if (clueKey === 'CHANGE_PLAN') {
           playAudioFx('card');
           const newPlayers = [...currentPlayers];
           const hands = newPlayers.map(p => p.hand);
           for (let i = 0; i < newPlayers.length; i++) newPlayers[i].hand = hands[(i - 1 + newPlayers.length) % newPlayers.length];
           addLog(`🔄 Change of Plan! Everyone passes hands right!`);
-          setPlayers(newPlayers); advanceTurnQueue(newPlayers);
+          setPlayers(newPlayers); advanceTurnQueue(newPlayers, updatedPile);
         }
       };
 
@@ -568,7 +598,15 @@
       const resolveStealGiftCard = (targetPId) => {
         setGiftCardHolder(activePlayer.id); playAudioFx('win');
         addLog(`🪝 STOLE THE GIFT CARD from ${getPlayerName(targetPId)}!`);
-        setActiveModalFor(null, null); advanceTurnQueue();
+        
+        const updated = players.map(p => {
+          if (p.id === targetPId) return { ...p, hand: p.hand.filter(c => c.type !== 'GIFT') };
+          if (p.id === activePlayer.id) return { ...p, hand: [...p.hand, { id: `gift_${Math.random()}`, type: 'GIFT', name: 'Gift Card', desc: 'Auto-win for Killer, free Antik for Safe.' }] };
+          return p;
+        });
+        
+        setPlayers(updated);
+        setActiveModalFor(null, null); advanceTurnQueue(updated);
       };
 
       const handleSabotageTargetSelect = (targetPId) => {
@@ -581,17 +619,26 @@
       const resolveSabotageRedistribute = (recipientPId) => {
         const { targetPId, removed, remaining } = modalData;
         const newTasksMap = { ...completedTasks, [targetPId]: remaining, [recipientPId]: [...(completedTasks[recipientPId] || []), ...removed] };
-        if (remaining.length < 4 && Number(giftCardHolder) === targetPId) { setGiftCardHolder(null); addLog(`💥 Sabotage broke the task streak! GIFT CARD REVOKED!`); }
-        setCompletedTasks(newTasksMap); addLog(`💥 Sabotage: Moved ${removed.length} tasks from ${getPlayerName(targetPId)} to ${getPlayerName(recipientPId)}!`);
-        setActiveModalFor(null, null); advanceTurnQueue();
+        
+        let updatedPlayers = [...players];
+        if (remaining.length < 4 && Number(giftCardHolder) === targetPId) { 
+           setGiftCardHolder(null); 
+           addLog(`💥 Sabotage broke the task streak! GIFT CARD REVOKED!`); 
+           updatedPlayers = updatedPlayers.map(p => p.id === targetPId ? { ...p, hand: p.hand.filter(c => c.type !== 'GIFT') } : p);
+        }
+        
+        setPlayers(updatedPlayers);
+        setCompletedTasks(newTasksMap); 
+        addLog(`💥 Sabotage: Moved ${removed.length} tasks from ${getPlayerName(targetPId)} to ${getPlayerName(recipientPId)}!`);
+        setActiveModalFor(null, null); advanceTurnQueue(updatedPlayers);
       };
 
-      const handleAntikPlay = (pId, card, currentPlayers) => {
+      const handleAntikPlay = (pId, card, currentPlayers, updatedPile) => {
         const actor = currentPlayers.find(p => p.id === pId);
         if (actor.role === 'KILLER') {
           playAudioFx('kill'); addLog(`🚨 RULE ENFORCED: ${actor.name} (KILLER) played Antik and is ELIMINATED!`);
           const updated = eliminateAndDistributeCards(pId, currentPlayers);
-          setPlayers(updated); if (!checkWinConditions(updated)) advanceTurnQueue(updated);
+          setPlayers(updated); if (!checkWinConditions(updated)) advanceTurnQueue(updated, updatedPile);
           return;
         }
         if (actor.isBot) {
@@ -603,18 +650,21 @@
       const resolveAntikAccusation = (accuserId, targetId, currentPlayers) => {
         const target = currentPlayers.find(p => p.id === targetId);
         addLog(`🕵️ Antik Verdict: ${getPlayerName(accuserId)} accuses ${target.name}!`);
+
         if (target.role === 'KILLER') {
           playAudioFx('win'); addLog(`🎯 CORRECT! ${target.name} was a KILLER!`);
           const updated = eliminateAndDistributeCards(targetId, currentPlayers);
           setPlayers(updated); setActiveModalFor(null, null);
           if (!checkWinConditions(updated)) advanceTurnQueue(updated);
         } else {
-          playAudioFx('kill'); addLog(`❌ WRONG! ${target.name} was SAFE. Killer team wins!`);
-          setActiveModalFor(null, null); triggerGameOver('KILLER', currentPlayers);
+          playAudioFx('kill'); addLog(`❌ WRONG! ${target.name} was SAFE. ${getPlayerName(accuserId)} is ELIMINATED for a false accusation!`);
+          const updated = eliminateAndDistributeCards(accuserId, currentPlayers);
+          setPlayers(updated); setActiveModalFor(null, null);
+          if (!checkWinConditions(updated)) advanceTurnQueue(updated);
         }
       };
 
-      const handleGiftPlay = (pId, card, currentPlayers) => {
+      const handleGiftPlay = (pId, card, currentPlayers, updatedPile) => {
         const actor = currentPlayers.find(p => p.id === pId);
         addLog(`🎁 ${actor.name} activates GIFT CARD!`);
         if (actor.role === 'KILLER') { playAudioFx('win'); triggerGameOver('KILLER', currentPlayers); }
@@ -708,7 +758,7 @@
       return (
         <div className="h-full w-full flex flex-col justify-between bg-zinc-950 shadow-2xl relative overflow-hidden xl:border-x border-zinc-800">
           
-          {/* MENU SCREEN */}
+          {/* UNIFIED MENU & LOBBY SCREEN */}
           {gameState === 'MENU' && (
             <div className="flex-1 p-6 flex flex-col justify-center items-center text-center overflow-y-auto">
               <div className="inline-block p-4 rounded-3xl bg-red-950/60 border border-red-700/80 mb-2 w-max">
@@ -716,50 +766,66 @@
               </div>
               <h1 className="text-2xl md:text-4xl font-black text-white tracking-tight mb-8">THE CARD GAME</h1>
 
-              <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 md:p-8 text-left space-y-5 shadow-xl">
-                <div>
-                  <label className="text-xs md:text-sm font-bold text-zinc-400 uppercase block mb-2">Total Participants: <span className="text-red-500">{playerCount}</span></label>
-                  <input type="range" min="4" max="10" value={playerCount} onChange={e => setPlayerCount(Number(e.target.value))} className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg cursor-pointer" />
-                </div>
-                <div className="border-t border-zinc-800 pt-5 space-y-3">
-                  <button onClick={() => startGame('SOLO')} className="w-full py-4 bg-amber-600 hover:bg-amber-500 text-white font-black text-sm md:text-base rounded-xl shadow-lg active:scale-95 transition-all">
-                    PLAY SOLO VS BOTS
-                  </button>
-                  <button onClick={hostRoom} className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black text-sm md:text-base rounded-xl shadow-lg active:scale-95 transition-all">
-                    HOST ONLINE ROOM
-                  </button>
-                </div>
-                <div className="flex space-x-2 pt-2 border-t border-zinc-800">
-                  <input type="text" placeholder="K1234" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-sm md:text-base text-white uppercase text-center font-mono tracking-widest" />
-                  <button onClick={joinRoom} className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 font-bold rounded-xl text-white border border-zinc-700 text-sm md:text-base">JOIN</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* LOBBY SCREEN */}
-          {gameState === 'LOBBY' && (
-            <div className="flex-1 p-6 flex flex-col justify-center items-center text-center overflow-y-auto">
-              <h2 className="text-2xl md:text-4xl font-black text-white mb-6">Online P2P Lobby</h2>
-              <div className="text-5xl md:text-7xl font-mono font-black text-red-500 bg-zinc-900 border border-zinc-800 px-8 py-4 rounded-2xl tracking-widest shadow-inner mb-4">
-                {roomCode}
-              </div>
-              <p className="text-zinc-400 text-xs md:text-sm mb-8 max-w-md">Empty slots will adaptively fill as explicit Bot players when the Host starts.</p>
-              
-              <div className="bg-zinc-900/80 border border-zinc-800 p-6 rounded-2xl w-full max-w-md text-left space-y-3 mb-8 shadow-xl">
-                <div className="text-xs md:text-sm font-bold text-zinc-500 mb-2 tracking-wider">CONNECTED ROSTER:</div>
-                {players.map(p => (
-                  <div key={p.id} className="text-white font-semibold flex items-center gap-3 text-sm md:text-base">
-                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> {p.name} {p.id === myId && <span className="text-zinc-500 text-xs">(You)</span>}
+              <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 md:p-8 text-left shadow-xl transition-all relative overflow-hidden">
+                
+                {/* Dynamic Content Based on Network Mode */}
+                {networkMode === 'SOLO' && !roomCode ? (
+                  <div className="space-y-6 animate-fade-in-up">
+                    <div>
+                      <label className="text-xs md:text-sm font-bold text-zinc-400 uppercase block mb-2">Total Participants: <span className="text-red-500">{playerCount}</span></label>
+                      <input type="range" min="4" max="10" value={playerCount} onChange={e => setPlayerCount(Number(e.target.value))} className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg cursor-pointer" />
+                      <p className="text-[10px] text-zinc-500 mt-2">Empty slots will be filled with Bot players automatically.</p>
+                    </div>
+                    <div className="border-t border-zinc-800 pt-5">
+                      <button onClick={hostRoom} className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black text-sm md:text-base rounded-xl shadow-lg active:scale-95 transition-all">
+                        CREATE LOBBY
+                      </button>
+                    </div>
+                    <div className="flex space-x-2 pt-2 border-t border-zinc-800">
+                      <input type="text" placeholder="K1234" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="flex-1 bg-zinc-800 border border-zinc-700 rounded-xl px-3 text-sm md:text-base text-white uppercase text-center font-mono tracking-widest" />
+                      <button onClick={joinRoom} className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 font-bold rounded-xl text-white border border-zinc-700 text-sm md:text-base">JOIN</button>
+                    </div>
                   </div>
-                ))}
-              </div>
-              
-              <div className="w-full max-w-md">
-                {networkMode === 'HOST' ? (
-                  <button onClick={() => startGame('HOST')} className="w-full py-4 md:py-5 bg-red-600 hover:bg-red-500 text-white font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all">LAUNCH MATCH</button>
                 ) : (
-                  <p className="text-amber-400 text-sm md:text-base font-bold animate-pulse">Waiting for host to launch...</p>
+                  <div className="space-y-6 animate-fade-in-up">
+                    <div className="text-center">
+                      <div className="text-xs md:text-sm font-bold text-zinc-400 uppercase mb-2">Room Code</div>
+                      <div className="text-4xl md:text-5xl font-mono font-black text-red-500 bg-zinc-950 border border-zinc-800 py-3 rounded-2xl tracking-widest shadow-inner">
+                        {roomCode}
+                      </div>
+                    </div>
+
+                    {networkMode === 'HOST' && (
+                      <div>
+                        <label className="text-xs md:text-sm font-bold text-zinc-400 uppercase block mb-2 flex justify-between">
+                          <span>Lobby Size: <span className="text-red-500">{playerCount}</span></span>
+                        </label>
+                        <input type="range" min="4" max="10" value={playerCount} onChange={e => setPlayerCount(Number(e.target.value))} className="w-full accent-red-600 h-2 bg-zinc-800 rounded-lg cursor-pointer" />
+                      </div>
+                    )}
+
+                    <div className="bg-zinc-950 border border-zinc-800 p-4 rounded-2xl text-left space-y-2">
+                      <div className="text-xs font-bold text-zinc-500 tracking-wider mb-2">CONNECTED PLAYERS:</div>
+                      {players.map(p => (
+                        <div key={p.id} className="text-white font-semibold flex items-center gap-3 text-sm">
+                          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div> {p.name} {p.id === myId && <span className="text-zinc-500 text-xs">(You)</span>}
+                        </div>
+                      ))}
+                      <div className="text-[10px] text-zinc-500 italic mt-2 pt-2 border-t border-zinc-900">
+                        {playerCount - players.length > 0 ? `+ ${playerCount - players.length} Bots will be added` : 'Lobby is full!'}
+                      </div>
+                    </div>
+
+                    {networkMode === 'HOST' ? (
+                      <button onClick={() => startGame('HOST')} className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-base rounded-xl shadow-lg active:scale-95 transition-all">
+                        ENTER GAME ⚡
+                      </button>
+                    ) : (
+                      <div className="text-center py-4 bg-zinc-800 rounded-xl border border-zinc-700">
+                        <p className="text-amber-400 text-sm font-bold animate-pulse">Waiting for host to launch...</p>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
