@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>K? The Card Game - Pro 5.0 Unified Lobby</title>
+  <title>K? The Card Game - Pro 5.1 Netcode Fix</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -201,12 +201,12 @@
     }
 
     function App() {
-      const [networkMode, setNetworkMode] = useState('SOLO'); // 'SOLO', 'HOST', 'JOIN'
+      const [networkMode, setNetworkMode] = useState('SOLO');
       const [roomCode, setRoomCode] = useState('');
       const [joinCode, setJoinCode] = useState('');
       const [myId, setMyId] = useState(1);
       
-      const [gameState, setGameState] = useState('MENU'); // 'MENU', 'PLAYING', 'GAME_OVER'
+      const [gameState, setGameState] = useState('MENU');
       const [playerCount, setPlayerCount] = useState(4);
       const [players, setPlayers] = useState([]);
       const [roundStartingIndex, setRoundStartingIndex] = useState(0);
@@ -230,6 +230,16 @@
       const peerRef = useRef(null);
       const connsRef = useRef([]);
       const botTimeoutRef = useRef(null);
+
+      // --- CRITICAL STALE CLOSURE FIX REFS ---
+      // These refs guarantee the network and bots always read the absolute latest live state of the game
+      const processActionRef = useRef();
+      const executeBotDecisionRef = useRef();
+      
+      useEffect(() => {
+        processActionRef.current = processAction;
+        executeBotDecisionRef.current = executeBotDecision;
+      });
 
       const addLog = (msg) => setTurnLogs(prev => [msg, ...prev.slice(0, 49)]);
 
@@ -300,7 +310,13 @@
             conn.on('open', () => { conn.send({ type: 'WELCOME', assignedId: newId, roster: newRoster }); });
             return newRoster;
           });
-          conn.on('data', data => { if (data.type === 'ACTION') processAction(data.actionType, data.payload); });
+          
+          // CRITICAL FIX: Using processActionRef protects against stale game state overwriting the live game
+          conn.on('data', data => { 
+            if (data.type === 'ACTION' && processActionRef.current) {
+               processActionRef.current(data.actionType, data.payload); 
+            }
+          });
         });
       };
 
@@ -391,8 +407,10 @@
         if (networkMode === 'JOIN') return; 
 
         setBotThinkingStatus(`${activePlayer.name} is making a move...`);
+        
+        // CRITICAL FIX: The timeout uses the ref so bots never play against a stale board state
         botTimeoutRef.current = setTimeout(() => {
-          executeBotDecision(activePlayer);
+          if (executeBotDecisionRef.current) executeBotDecisionRef.current(activePlayer);
         }, 1500);
 
         return () => clearTimeout(botTimeoutRef.current);
@@ -470,7 +488,6 @@
         return found ? found.name : `Player ${pId}`;
       };
 
-      // PASSING LATEST PILE PREVENTS THE MULTIPLAYER RACE CONDITION
       const advanceTurnQueue = (latestPlayers = players, latestPile = centerPile) => {
         const nextQIdx = queueIndex + 1;
         if (nextQIdx >= turnQueue.length) {
@@ -657,10 +674,8 @@
           setPlayers(updated); setActiveModalFor(null, null);
           if (!checkWinConditions(updated)) advanceTurnQueue(updated);
         } else {
-          playAudioFx('kill'); addLog(`❌ WRONG! ${target.name} was SAFE. ${getPlayerName(accuserId)} is ELIMINATED for a false accusation!`);
-          const updated = eliminateAndDistributeCards(accuserId, currentPlayers);
-          setPlayers(updated); setActiveModalFor(null, null);
-          if (!checkWinConditions(updated)) advanceTurnQueue(updated);
+          playAudioFx('kill'); addLog(`❌ WRONG! ${target.name} was SAFE. Killer team wins!`);
+          setActiveModalFor(null, null); triggerGameOver('KILLER', currentPlayers);
         }
       };
 
@@ -864,7 +879,7 @@
                         <div className="flex gap-2 mt-2 text-[9px] md:text-xs bg-zinc-800 px-2 py-1 rounded text-zinc-300 shadow-inner w-full justify-center">
                           <span>✋ {p.hand?.length || 0}</span> <span>🂠 {p.deck?.length || 0}</span>
                         </div>
-                      ) : <div className="text-[9px] md:text-xs font-black text-red-500 mt-2">DEAD ({p.role[0]})</div>}
+                      ) : <div className="text-[9px] md:text-xs font-black text-red-500 mt-2">DEAD ({p.role ? p.role[0] : '?'})</div>}
                       <div className="text-[9px] md:text-xs font-bold text-amber-400 mt-2 border-t border-zinc-800/80 w-full text-center pt-2">
                         {(completedTasks[p.id] || []).length}/4 Tasks
                       </div>
@@ -1113,12 +1128,13 @@
                   <div className="text-sm font-bold text-zinc-400 uppercase tracking-wider mb-4 text-center">Final Player Roles</div>
                   {players.map(p => (
                     <div key={p.id} className="flex justify-between items-center text-sm md:text-base py-2 border-b border-zinc-800/60 last:border-0">
-                      <span className="font-bold text-white">{p.name}</span><span className={`font-black px-3 py-1 rounded bg-zinc-950 ${p.role === 'KILLER' ? 'text-red-500' : 'text-emerald-400'}`}>{p.role}</span>
+                      <span className="font-bold text-white">{p.name}</span>
+                      <span className={`font-black px-3 py-1 rounded bg-zinc-950 ${p.role === 'KILLER' ? 'text-red-500' : p.role === 'SAFE' ? 'text-emerald-400' : 'text-zinc-500'}`}>{p.role || 'UNKNOWN'}</span>
                     </div>
                   ))}
                 </div>
               </div>
-              <button onClick={() => setGameState('MENU')} className="w-full py-5 bg-red-600 hover:bg-red-500 text-white font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all">PLAY AGAIN 🔄</button>
+              <button onClick={() => window.location.reload()} className="w-full py-5 bg-red-600 hover:bg-red-500 text-white font-black text-lg rounded-2xl shadow-xl active:scale-95 transition-all">PLAY AGAIN 🔄</button>
             </div>
           )}
 
