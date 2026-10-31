@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>K? The Card Game - Pro 5.4 Network Sanitizer</title>
+  <title>K? The Card Game - Pro 5.5 Action Queue & Anti-Spam</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -67,8 +67,6 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // --- NETWORK SANITIZER FIREWALL ---
-    // This recursively strips out ArrayBuffers and Blobs that cause React Error #31
     const sanitizeNetworkData = (obj) => {
       if (!obj) return obj;
       if (obj instanceof ArrayBuffer || (typeof Blob !== 'undefined' && obj instanceof Blob)) {
@@ -284,15 +282,15 @@
       const [modalData, setModalData] = useState(null);
       const [modalOwnerId, setModalOwnerId] = useState(null);
 
+      // --- BRAND NEW ACTION QUEUE ARCHITECTURE ---
+      const [actionQueue, setActionQueue] = useState([]);
+
       const peerRef = useRef(null);
       const connsRef = useRef([]);
       const botTimeoutRef = useRef(null);
-
-      const processActionRef = useRef();
       const executeBotDecisionRef = useRef();
       
       useEffect(() => {
-        processActionRef.current = processAction;
         executeBotDecisionRef.current = executeBotDecision;
       });
 
@@ -319,6 +317,7 @@
         }
       }, [gameState, players, roundStartingIndex, turnQueue, queueIndex, currentRound, centerPile, centerPileBlocked, completedTasks, giftCardHolder, gameWinner, turnLogs, activeModal, modalData, modalOwnerId, botThinkingStatus, playerCount, networkMode]);
 
+      // All actions flow through this single pipeline now
       const dispatchAction = (actionType, payload) => {
         if (networkMode === 'JOIN') {
           try {
@@ -328,9 +327,22 @@
           }
           setSelectedCard(null);
         } else {
-          processAction(actionType, payload);
+          // Push to local queue instead of instant processing
+          setActionQueue(prev => [...prev, { actionType, payload }]);
+          setSelectedCard(null);
         }
       };
+
+      // QUEUE PROCESSOR: Flawlessly executes actions exactly one render cycle at a time
+      useEffect(() => {
+        if (actionQueue.length > 0 && !activeModal && gameState !== 'MENU') {
+           const currentAction = actionQueue[0];
+           
+           // Remove from queue first to prevent infinite loop if a crash occurs
+           setActionQueue(prev => prev.slice(1));
+           processAction(currentAction.actionType, currentAction.payload);
+        }
+      }, [actionQueue, activeModal, gameState, players, centerPile, queueIndex, turnQueue, currentRound, roundStartingIndex, completedTasks, giftCardHolder]);
 
       const processAction = (actionType, payload) => {
         switch(actionType) {
@@ -344,7 +356,7 @@
           case 'SABOTAGE_REDISTRIBUTE': resolveSabotageRedistribute(payload.recipientPId); break;
           case 'ANTIK_ACCUSE': resolveAntikAccusation(payload.accuserId, payload.targetId, players); break;
           case 'TRIGGER_REVEAL': setActiveModalFor('REVEAL_ANIM', 'ALL', { pile: centerPile, currentPlayers: players }); break;
-          case 'FINALIZE_ROUND': finalizeResolution(payload.pile, players); break;
+          case 'FINALIZE_ROUND': finalizeResolution(centerPile, players); break;
           case 'CLOSE_MODAL': setActiveModalFor(null, null); advanceTurnQueue(); break;
           default: break;
         }
@@ -373,8 +385,9 @@
           
           conn.on('data', rawData => { 
             const data = sanitizeNetworkData(rawData);
-            if (data && data.type === 'ACTION' && processActionRef.current) {
-               processActionRef.current(data.actionType, data.payload); 
+            if (data && data.type === 'ACTION') {
+               // Push incoming network plays to the end of the line
+               setActionQueue(prev => [...prev, { actionType: data.actionType, payload: data.payload }]);
             }
           });
         });
@@ -455,6 +468,7 @@
         setGiftCardHolder(null);
         setGameWinner(null);
         setActiveModalFor(null, null);
+        setActionQueue([]); // Clear queue completely before start
         setTurnLogs([`🎮 Match live! Dynamic players locked in.`]);
         setGameState('PLAYING');
       };
@@ -467,6 +481,9 @@
         if (gameState !== 'PLAYING' || !activePlayer || !activePlayer.isBot || !activePlayer.isAlive) return;
         if (networkMode === 'JOIN') return; 
 
+        // CRITICAL BOT FIX: Bots MUST wait for the network action queue to completely empty!
+        if (actionQueue.length > 0 || activeModal !== null) return;
+
         setBotThinkingStatus(`${activePlayer.name} is making a move...`);
         
         botTimeoutRef.current = setTimeout(() => {
@@ -474,7 +491,7 @@
         }, 1500);
 
         return () => clearTimeout(botTimeoutRef.current);
-      }, [gameState, queueIndex, turnQueue, networkMode, activePlayer]);
+      }, [gameState, queueIndex, turnQueue, networkMode, activePlayer, actionQueue.length, activeModal]);
 
       const executeBotDecision = (bot) => {
         const hand = bot.hand || [];
@@ -510,10 +527,17 @@
           else { destination = 'NEXT_DECK'; }
         }
 
-        executeCardPlay(bot.id, cardToPlay, destination);
+        dispatchAction('PLAY_CARD', { pId: bot.id, card: cardToPlay, dest: destination });
       };
 
       const executeCardPlay = (playerId, card, destination) => {
+        // 🚨 TURN VERIFICATION LOCK 🚨
+        // Stop rapid-fire duplicate plays completely dead in their tracks.
+        if (playerId !== turnQueue[queueIndex]) {
+          addLog(`⚠️ Anti-Spam: Blocked out-of-turn play from ${getPlayerName(playerId)}`);
+          return;
+        }
+
         playAudioFx('play');
         setBotThinkingStatus(null);
         let updatedPlayers = players.map(p => p.id === playerId ? { ...p, hand: p.hand.filter(c => c.id !== card.id) } : p);
@@ -531,15 +555,14 @@
           addLog(`🤝 ${getPlayerName(playerId)} passed a card to ${targetPlayer.name}'s Deck.`);
         } else if (destination === 'FACE_UP') {
           addLog(`📢 ${getPlayerName(playerId)} dropped ${card.name} FACE-UP!`);
-          if (card.type === 'NOBEE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleNobeePlay(playerId, card, updatedPlayers, updatedPile); return; }
-          else if (card.type === 'ANTIK') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleAntikPlay(playerId, card, updatedPlayers, updatedPile); return; }
-          else if (card.type === 'GIFT') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleGiftPlay(playerId, card, updatedPlayers, updatedPile); return; }
-          else if (card.type === 'CLUE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); setSelectedCard(null); handleCluePlay(playerId, card, updatedPlayers, updatedPile); return; }
+          if (card.type === 'NOBEE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); handleNobeePlay(playerId, card, updatedPlayers, updatedPile); return; }
+          else if (card.type === 'ANTIK') { setPlayers(updatedPlayers); setCenterPile(updatedPile); handleAntikPlay(playerId, card, updatedPlayers, updatedPile); return; }
+          else if (card.type === 'GIFT') { setPlayers(updatedPlayers); setCenterPile(updatedPile); handleGiftPlay(playerId, card, updatedPlayers, updatedPile); return; }
+          else if (card.type === 'CLUE') { setPlayers(updatedPlayers); setCenterPile(updatedPile); handleCluePlay(playerId, card, updatedPlayers, updatedPile); return; }
         }
 
         setPlayers(updatedPlayers);
         setCenterPile(updatedPile);
-        setSelectedCard(null);
         advanceTurnQueue(updatedPlayers, updatedPile);
       };
 
@@ -548,10 +571,10 @@
         return found ? String(found.name) : `Player ${pId}`;
       };
 
-      const advanceTurnQueue = (latestPlayers = players, latestPile = centerPile) => {
+      const advanceTurnQueue = () => {
         const nextQIdx = queueIndex + 1;
         if (nextQIdx >= turnQueue.length) {
-          setTimeout(() => setActiveModalFor('REVEAL_ANIM', 'ALL', { pile: latestPile, currentPlayers: latestPlayers }), 600);
+          setTimeout(() => dispatchAction('TRIGGER_REVEAL', {}), 600);
         } else {
           setQueueIndex(nextQIdx);
         }
@@ -566,7 +589,7 @@
             const scanDeck = Math.random() > 0.5;
             addLog(`🔍 ${actor.name} scanned ${target.name}'s ${scanDeck ? 'deck' : 'hand'}.`);
           }
-          advanceTurnQueue(currentPlayers, updatedPile);
+          advanceTurnQueue();
         } else {
           setActiveModalFor('NOBEE_CHOICE', pId);
         }
@@ -591,7 +614,7 @@
           if (actor.isBot) { 
             const targets = currentPlayers.filter(p => p.id !== pId && p.isAlive && p.hand.length > 0);
             if(targets.length > 0) addLog(`📢 "Show Me": ${actor.name} inspected ${targets[Math.floor(Math.random()*targets.length)].name}'s hand.`);
-            advanceTurnQueue(currentPlayers, updatedPile); 
+            advanceTurnQueue(); 
           }
           else setActiveModalFor('SHOW_ME_TARGET', pId);
         } else if (clueKey === 'NEEDING') {
@@ -607,8 +630,8 @@
                  });
                  setPlayers(updated);
                  addLog(`🪝 ${actor.name} stole a card from ${target.name}!`);
-                 advanceTurnQueue(updated, updatedPile);
-            } else { advanceTurnQueue(currentPlayers, updatedPile); }
+                 advanceTurnQueue();
+            } else { advanceTurnQueue(); }
           }
           else setActiveModalFor('NEEDING_TARGET', pId);
         } else if (clueKey === 'SABOTAGE') {
@@ -628,8 +651,8 @@
                  setPlayers(updated);
                  setCompletedTasks(newTasksMap);
                  addLog(`💥 ${actor.name} sabotaged 1 task from ${target.name}!`);
-                 advanceTurnQueue(updated, updatedPile);
-             } else { advanceTurnQueue(currentPlayers, updatedPile); }
+                 advanceTurnQueue();
+             } else { advanceTurnQueue(); }
           }
           else setActiveModalFor('SABOTAGE_TARGET', pId);
         } else if (clueKey === 'CCTV') {
@@ -638,13 +661,13 @@
           setActiveModalFor('CCTV_MODAL', pId, { armedPlayers });
           addLog(armedPlayers.length > 0 ? `📹 CCTV: Kill cards detected on ${armedPlayers.map(p=>p.name).join(', ')}!` : `📹 CCTV: No active Kill cards found!`);
         } else if (clueKey === 'EYES_ON_YOU') {
-          setCenterPileBlocked(true); addLog(`👁️ "Eyes On You": Center Pile blocked!`); advanceTurnQueue(currentPlayers, updatedPile);
+          setCenterPileBlocked(true); addLog(`👁️ "Eyes On You": Center Pile blocked!`); advanceTurnQueue();
         } else if (clueKey === 'CHANGE_PLAN') {
           playAudioFx('card');
           const hands = currentPlayers.map(p => p.hand);
           const newPlayers = currentPlayers.map((p, i) => ({ ...p, hand: hands[(i - 1 + hands.length) % hands.length] }));
           addLog(`🔄 Change of Plan! Everyone passes hands right!`);
-          setPlayers(newPlayers); advanceTurnQueue(newPlayers, updatedPile);
+          setPlayers(newPlayers); advanceTurnQueue();
         }
       };
 
@@ -667,7 +690,7 @@
         });
         playAudioFx('card'); setPlayers(updated);
         addLog(`🪝 Stole [${stolenCard.name}] from ${getPlayerName(targetPId)}!`);
-        setActiveModalFor(null, null); advanceTurnQueue(updated);
+        setActiveModalFor(null, null); advanceTurnQueue();
       };
 
       const resolveStealGiftCard = (targetPId) => {
@@ -681,7 +704,7 @@
         });
         
         setPlayers(updated);
-        setActiveModalFor(null, null); advanceTurnQueue(updated);
+        setActiveModalFor(null, null); advanceTurnQueue();
       };
 
       const handleSabotageTargetSelect = (targetPId) => {
@@ -705,7 +728,7 @@
         setPlayers(updatedPlayers);
         setCompletedTasks(newTasksMap); 
         addLog(`💥 Sabotage: Moved ${removed.length} tasks from ${getPlayerName(targetPId)} to ${getPlayerName(recipientPId)}!`);
-        setActiveModalFor(null, null); advanceTurnQueue(updatedPlayers);
+        setActiveModalFor(null, null); advanceTurnQueue();
       };
 
       const handleAntikPlay = (pId, card, currentPlayers, updatedPile) => {
@@ -713,7 +736,7 @@
         if (actor.role === 'KILLER') {
           playAudioFx('kill'); addLog(`🚨 RULE ENFORCED: ${actor.name} (KILLER) played Antik and is ELIMINATED!`);
           const updated = eliminateAndDistributeCards(pId, currentPlayers);
-          setPlayers(updated); if (!checkWinConditions(updated)) advanceTurnQueue(updated, updatedPile);
+          setPlayers(updated); if (!checkWinConditions(updated)) advanceTurnQueue();
           return;
         }
         if (actor.isBot) {
@@ -730,7 +753,7 @@
           playAudioFx('win'); addLog(`🎯 CORRECT! ${target.name} was a KILLER!`);
           const updated = eliminateAndDistributeCards(targetId, currentPlayers);
           setPlayers(updated); setActiveModalFor(null, null);
-          if (!checkWinConditions(updated)) advanceTurnQueue(updated);
+          if (!checkWinConditions(updated)) advanceTurnQueue();
         } else {
           playAudioFx('kill'); addLog(`❌ WRONG! ${target.name} was SAFE. Killer team wins!`);
           setActiveModalFor(null, null); triggerGameOver('KILLER', currentPlayers);
@@ -823,6 +846,7 @@
 
       const triggerGameOver = (winnerTeam, currentPlayers) => {
         playAudioFx('win'); setGameWinner(String(winnerTeam)); setGameState('GAME_OVER'); addLog(`🏆 ${winnerTeam} WINS!`);
+        setActionQueue([]); // Wipe all pending actions
         try { confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } }); } catch (e) {}
       };
 
